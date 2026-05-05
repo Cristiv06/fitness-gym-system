@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ro" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Autentificare</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}"/>
+</head>
+<body class="page">
+<h1>Autentificare</h1>
+<form class="card" th:action="@{/login}" method="post">
+    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+    <label>
+        Utilizator
+        <input type="text" name="username" autocomplete="username" required/>
+    </label>
+    <label>
+        Parola
+        <input type="password" name="password" autocomplete="current-password" required/>
+    </label>
+    <label class="inline">
+        <input type="checkbox" name="remember-me"/> Tine-ma minte
+    </label>
+    <button type="submit">Intrare</button>
+</form>
+<p class="error" th:if="${param.error}">Utilizator sau parola incorecte.</p>
+<p class="ok" th:if="${param.logout}">Te-ai deconectat.</p>
+<p class="hint">Conturi demo: <code>admin</code> / <code>Admin123!</code> (ADMIN), <code>user</code> / <code>User123!</code> (USER).</p>
+</body>
+</html>

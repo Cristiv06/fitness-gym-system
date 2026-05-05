@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="ro" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Sistem sala fitness</title>
+    <link rel="stylesheet" th:href="@{/css/style.css}"/>
+</head>
+<body class="page">
+<h1>Sistem sala fitness</h1>
+<div class="card">
+    <p><a th:href="@{/login}">Autentificare</a></p>
+    <p th:if="${#authentication != null && #authentication.isAuthenticated()}">
+        <a th:href="@{/swagger-ui/index.html}">Swagger UI</a>
+    </p>
+    <p th:if="${#authentication != null && #authentication.isAuthenticated()}">
+        <form th:action="@{/logout}" method="post">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"/>
+            <button type="submit">Deconectare</button>
+        </form>
+    </p>
+    <p th:if="${#authentication == null || !#authentication.isAuthenticated()}">
+        Pentru documentatia API (Swagger), autentifica-te mai intai.
+    </p>
+</div>
+</body>
+</html>

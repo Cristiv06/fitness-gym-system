@@ -1,0 +1,32 @@
+spring:
+  application:
+    name: gym-system
+  datasource:
+    url: ${DB_URL:jdbc:mysql://localhost:3306/gym_system?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=UTC}
+    username: ${DB_USER:gym_user}
+    password: ${DB_PASSWORD:gym_pass}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        format_sql: true
+    open-in-view: false
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+server:
+  port: ${SERVER_PORT:8080}
+
+app:
+  security:
+    remember-me-key: ${REMEMBER_ME_KEY:gym-remember-me-key-change-in-production-min-32-chars}
+
+springdoc:
+  swagger-ui:
+    persistAuthorization: true
+    csrf:
+      enabled: true
+  api-docs:
+    path: /v3/api-docs
