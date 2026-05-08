@@ -34,17 +34,54 @@ function toPayload(value, type) {
   return value;
 }
 
-function CrudPanel({ resource }) {
+function formatCell(value) {
+  if (value == null) return "";
+  if (Array.isArray(value)) return value.join(", ");
+  return String(value);
+}
+
+function validateForm(resource, formData) {
+  for (const field of resource.fields) {
+    const value = formData[field.key];
+    if (field.required && !String(value || "").trim()) {
+      return `${field.label} este obligatoriu.`;
+    }
+    if (field.type === "number" && value !== "" && Number.isNaN(Number(value))) {
+      return `${field.label} trebuie sa fie numar valid.`;
+    }
+  }
+  return "";
+}
+
+function CrudPanel({ resource, canWrite, roleLabel }) {
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [formData, setFormData] = useState(() => emptyForm(resource));
   const [editingId, setEditingId] = useState(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [page, setPage] = useState(1);
+  const [toast, setToast] = useState("");
+  const pageSize = 7;
 
   const columns = useMemo(() => {
     const preferred = [resource.idField, ...resource.fields.map((f) => f.key)];
     return [...new Set(preferred)];
   }, [resource]);
+
+  const filteredRows = useMemo(() => {
+    const normalized = searchTerm.trim().toLowerCase();
+    if (!normalized) return rows;
+    return rows.filter((row) =>
+      columns.some((column) => formatCell(row[column]).toLowerCase().includes(normalized))
+    );
+  }, [rows, columns, searchTerm]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredRows.length / pageSize));
+  const pageRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredRows.slice(start, start + pageSize);
+  }, [filteredRows, page]);
 
   async function loadData() {
     setLoading(true);
@@ -62,8 +99,16 @@ function CrudPanel({ resource }) {
   useEffect(() => {
     setFormData(emptyForm(resource));
     setEditingId(null);
+    setSearchTerm("");
+    setPage(1);
     loadData();
   }, [resource.key]);
+
+  useEffect(() => {
+    if (page > totalPages) {
+      setPage(totalPages);
+    }
+  }, [page, totalPages]);
 
   function handleChange(key, value) {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -85,6 +130,15 @@ function CrudPanel({ resource }) {
 
   async function onSubmit(event) {
     event.preventDefault();
+    if (!canWrite) {
+      setError(`Rolul ${roleLabel} poate doar citi (GET).`);
+      return;
+    }
+    const validationMessage = validateForm(resource, formData);
+    if (validationMessage) {
+      setError(validationMessage);
+      return;
+    }
 
     const payload = {};
     for (const field of resource.fields) {
@@ -106,15 +160,23 @@ function CrudPanel({ resource }) {
       }
       clearForm();
       await loadData();
+      setToast(editingId == null ? "Element creat cu succes." : "Element actualizat cu succes.");
+      setTimeout(() => setToast(""), 2500);
     } catch (e) {
       setError(e.message);
     }
   }
 
   async function onDelete(id) {
+    if (!canWrite) {
+      setError(`Rolul ${roleLabel} poate doar citi (GET).`);
+      return;
+    }
     try {
       await apiFetch(`${resource.endpoint}/${id}`, { method: "DELETE" });
       await loadData();
+      setToast("Element sters cu succes.");
+      setTimeout(() => setToast(""), 2500);
     } catch (e) {
       setError(e.message);
     }
@@ -123,12 +185,33 @@ function CrudPanel({ resource }) {
   return (
     <div className="panel">
       <div className="panel-header">
-        <h2>{resource.label}</h2>
-        <button onClick={loadData} className="secondary-btn" type="button">
-          Refresh
-        </button>
+        <div>
+          <h2>{resource.label}</h2>
+          <p className="subtle-text">Gestionare completa pentru resursa selectata.</p>
+        </div>
+        <div className="panel-header-actions">
+          <input
+            className="search-input"
+            placeholder="Cauta in tabel..."
+            value={searchTerm}
+            onChange={(e) => {
+              setSearchTerm(e.target.value);
+              setPage(1);
+            }}
+          />
+          <button onClick={loadData} className="secondary-btn" type="button">
+            Refresh
+          </button>
+        </div>
       </div>
 
+      <div className="stats-row">
+        <span className="stat-chip">Rol curent: {roleLabel}</span>
+        <span className="stat-chip">Total: {rows.length}</span>
+        <span className="stat-chip">Filtrate: {filteredRows.length}</span>
+      </div>
+
+      {toast ? <p className="success-text">{toast}</p> : null}
       {error ? <p className="error-text">{error}</p> : null}
 
       <form className="form-grid" onSubmit={onSubmit}>
@@ -140,12 +223,14 @@ function CrudPanel({ resource }) {
                 value={formData[field.key]}
                 onChange={(e) => handleChange(field.key, e.target.value)}
                 required={field.required}
+                disabled={!canWrite}
               />
             ) : field.type === "select" ? (
               <select
                 value={formData[field.key]}
                 onChange={(e) => handleChange(field.key, e.target.value)}
                 required={field.required}
+                disabled={!canWrite}
               >
                 <option value="">Select...</option>
                 {field.options.map((opt) => (
@@ -167,21 +252,24 @@ function CrudPanel({ resource }) {
                 value={formData[field.key]}
                 onChange={(e) => handleChange(field.key, e.target.value)}
                 required={field.required}
+                disabled={!canWrite}
               />
             )}
           </label>
         ))}
 
         <div className="form-actions">
-          <button type="submit">{editingId == null ? "Create" : "Update"}</button>
-          <button onClick={clearForm} type="button" className="secondary-btn">
-            Clear
+          <button type="submit" disabled={!canWrite}>
+            {editingId == null ? "Create" : "Update"}
+          </button>
+          <button onClick={clearForm} type="button" className="secondary-btn" disabled={!canWrite}>
+            Reset
           </button>
         </div>
       </form>
 
       <div className="table-wrap">
-        {loading ? <p>Loading...</p> : null}
+        {loading ? <p className="subtle-text">Se incarca datele...</p> : null}
         <table>
           <thead>
             <tr>
@@ -192,11 +280,11 @@ function CrudPanel({ resource }) {
             </tr>
           </thead>
           <tbody>
-            {rows.map((row) => (
+            {pageRows.map((row) => (
               <tr key={row[resource.idField]}>
                 {columns.map((column) => (
                   <td key={`${row[resource.idField]}-${column}`}>
-                    {Array.isArray(row[column]) ? row[column].join(", ") : String(row[column] ?? "")}
+                    {formatCell(row[column])}
                   </td>
                 ))}
                 <td className="actions-cell">
@@ -204,10 +292,16 @@ function CrudPanel({ resource }) {
                     type="button"
                     className="secondary-btn"
                     onClick={() => startEdit(row)}
+                    disabled={!canWrite}
                   >
                     Edit
                   </button>
-                  <button type="button" className="danger-btn" onClick={() => onDelete(row[resource.idField])}>
+                  <button
+                    type="button"
+                    className="danger-btn"
+                    onClick={() => onDelete(row[resource.idField])}
+                    disabled={!canWrite}
+                  >
                     Delete
                   </button>
                 </td>
@@ -215,6 +309,30 @@ function CrudPanel({ resource }) {
             ))}
           </tbody>
         </table>
+        {!loading && pageRows.length === 0 ? (
+          <p className="empty-text">Nu exista rezultate pentru filtrele curente.</p>
+        ) : null}
+        <div className="pagination">
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            disabled={page === 1}
+          >
+            Prev
+          </button>
+          <span>
+            Page {page} / {totalPages} ({filteredRows.length} rows)
+          </span>
+          <button
+            type="button"
+            className="secondary-btn"
+            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+          >
+            Next
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -233,7 +351,7 @@ function LoginView({ onSuccess }) {
     setError("");
     try {
       await login({ username, password, rememberMe });
-      onSuccess();
+      await onSuccess();
     } catch (e) {
       setError(e.message);
     } finally {
@@ -244,7 +362,7 @@ function LoginView({ onSuccess }) {
   return (
     <div className="center-box">
       <h1>Gym System Login</h1>
-      <p>Demo conturi: admin/Admin123! si user/User123!</p>
+      <p>Conturi demo: admin/Admin123! si user/User123!</p>
       <form onSubmit={handleSubmit} className="login-form">
         <label className="field">
           <span>Username</span>
@@ -268,7 +386,7 @@ function LoginView({ onSuccess }) {
           Remember me
         </label>
         <button type="submit" disabled={loading}>
-          {loading ? "Signing in..." : "Sign in"}
+          {loading ? "Signing in..." : "Login"}
         </button>
       </form>
       {error ? <p className="error-text">{error}</p> : null}
@@ -281,15 +399,23 @@ export default function App() {
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
   const [selectedResourceKey, setSelectedResourceKey] = useState(resources[0].key);
   const [authError, setAuthError] = useState("");
+  const [role, setRole] = useState("guest");
 
   const selectedResource = resources.find((resource) => resource.key === selectedResourceKey) ?? resources[0];
+  const canWrite = role === "admin";
+  const roleLabel = role.toUpperCase();
+
+  async function refreshSession() {
+    const session = await getCurrentSession();
+    setIsAuthenticated(session.authenticated);
+    setRole(session.role || "user");
+  }
 
   useEffect(() => {
     (async () => {
       setIsCheckingAuth(true);
       try {
-        const session = await getCurrentSession();
-        setIsAuthenticated(session.authenticated);
+        await refreshSession();
       } catch (e) {
         setAuthError(e.message);
       } finally {
@@ -305,6 +431,7 @@ export default function App() {
       setAuthError(e.message);
     } finally {
       setIsAuthenticated(false);
+      setRole("guest");
     }
   }
 
@@ -313,39 +440,51 @@ export default function App() {
   }
 
   if (!isAuthenticated) {
-    return <LoginView onSuccess={() => setIsAuthenticated(true)} />;
+    return <LoginView onSuccess={refreshSession} />;
   }
 
   return (
-    <div className="app-shell">
-      <header className="topbar">
-        <h1>Fitness Gym Admin UI</h1>
-        <div className="topbar-actions">
-          <a href="/swagger-ui/index.html" target="_blank" rel="noreferrer">
-            Swagger
-          </a>
-          <button type="button" className="secondary-btn" onClick={handleLogout}>
-            Logout
-          </button>
-        </div>
-      </header>
+    <div className="layout">
+      <aside className="sidebar">
+        <h2>Gym Frontend</h2>
+        <p className="role-badge">Rol: {roleLabel}</p>
+        <p className="sidebar-subtitle">Selecteaza o resursa pentru operatii CRUD.</p>
+        <nav className="tabs tabs-vertical">
+          {resources.map((resource) => (
+            <button
+              key={resource.key}
+              type="button"
+              className={resource.key === selectedResourceKey ? "tab active" : "tab"}
+              onClick={() => setSelectedResourceKey(resource.key)}
+            >
+              {resource.label}
+            </button>
+          ))}
+        </nav>
+      </aside>
+      <main className="app-shell">
+        <header className="topbar">
+          <h1>Fitness Gym Dashboard</h1>
+          <div className="topbar-actions">
+            <a href="/swagger-ui/index.html" target="_blank" rel="noreferrer">
+              Swagger
+            </a>
+            <button type="button" className="secondary-btn" onClick={handleLogout}>
+              Logout
+            </button>
+          </div>
+        </header>
 
-      {authError ? <p className="error-text">{authError}</p> : null}
+        {!canWrite ? (
+          <p className="notice-text">
+            Esti logat cu rol USER. Poti vedea datele, dar operatiile Create/Update/Delete sunt dezactivate.
+          </p>
+        ) : null}
 
-      <nav className="tabs">
-        {resources.map((resource) => (
-          <button
-            key={resource.key}
-            type="button"
-            className={resource.key === selectedResourceKey ? "tab active" : "tab"}
-            onClick={() => setSelectedResourceKey(resource.key)}
-          >
-            {resource.label}
-          </button>
-        ))}
-      </nav>
+        {authError ? <p className="error-text">{authError}</p> : null}
 
-      <CrudPanel resource={selectedResource} />
+        <CrudPanel resource={selectedResource} canWrite={canWrite} roleLabel={roleLabel} />
+      </main>
     </div>
   );
 }
