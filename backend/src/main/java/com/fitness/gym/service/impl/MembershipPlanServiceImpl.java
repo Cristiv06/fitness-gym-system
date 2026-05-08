@@ -9,9 +9,11 @@ import com.fitness.gym.repository.MembershipPlanRepository;
 import com.fitness.gym.repository.SubscriptionRepository;
 import com.fitness.gym.service.MembershipPlanService;
 import java.util.List;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @Transactional
 public class MembershipPlanServiceImpl implements MembershipPlanService {
@@ -28,7 +30,9 @@ public class MembershipPlanServiceImpl implements MembershipPlanService {
     public MembershipPlanResponse create(MembershipPlanRequest request) {
         MembershipPlan entity = new MembershipPlan();
         apply(entity, request);
-        return toResponse(repository.save(entity));
+        MembershipPlanResponse response = toResponse(repository.save(entity));
+        log.info("Membership plan created: id={}, name={}", response.planId(), response.name());
+        return response;
     }
 
     @Override
@@ -47,6 +51,7 @@ public class MembershipPlanServiceImpl implements MembershipPlanService {
     public MembershipPlanResponse update(Long planId, MembershipPlanRequest request) {
         MembershipPlan entity = load(planId);
         apply(entity, request);
+        log.info("Membership plan updated: id={}", planId);
         return toResponse(repository.save(entity));
     }
 
@@ -54,9 +59,11 @@ public class MembershipPlanServiceImpl implements MembershipPlanService {
     public void delete(Long planId) {
         MembershipPlan entity = load(planId);
         if (subscriptionRepository.existsByPlan_PlanId(planId)) {
+            log.warn("Cannot delete plan id={}: active subscriptions exist", planId);
             throw new BadRequestException("Nu se poate sterge planul: exista abonamente asociate.");
         }
         repository.delete(entity);
+        log.info("Membership plan deleted: id={}", planId);
     }
 
     private MembershipPlan load(Long id) {

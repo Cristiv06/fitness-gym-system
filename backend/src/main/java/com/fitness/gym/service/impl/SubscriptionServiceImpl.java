@@ -13,9 +13,11 @@ import com.fitness.gym.repository.MembershipPlanRepository;
 import com.fitness.gym.repository.SubscriptionRepository;
 import com.fitness.gym.service.SubscriptionService;
 import java.util.List;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @Transactional
 public class SubscriptionServiceImpl implements SubscriptionService {
@@ -48,7 +50,10 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         s.setStartDate(request.startDate());
         s.setEndDate(request.endDate());
         s.setStatus(request.status() != null ? request.status() : SubscriptionStatus.ACTIVE);
-        return toResponse(subscriptionRepository.save(s));
+        SubscriptionResponse response = toResponse(subscriptionRepository.save(s));
+        log.info("Subscription created: id={}, memberId={}, planId={}, status={}",
+                response.subscriptionId(), response.memberId(), response.planId(), response.status());
+        return response;
     }
 
     @Override
@@ -78,16 +83,19 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         s.setStartDate(request.startDate());
         s.setEndDate(request.endDate());
         s.setStatus(request.status() != null ? request.status() : s.getStatus());
+        log.info("Subscription updated: id={}", subscriptionId);
         return toResponse(subscriptionRepository.save(s));
     }
 
     @Override
     public void delete(Long subscriptionId) {
         subscriptionRepository.deleteById(load(subscriptionId).getSubscriptionId());
+        log.info("Subscription deleted: id={}", subscriptionId);
     }
 
     private void validateDates(SubscriptionRequest request) {
         if (request.endDate().isBefore(request.startDate())) {
+            log.warn("Invalid subscription dates: start={}, end={}", request.startDate(), request.endDate());
             throw new BadRequestException("Data sfarsit trebuie sa fie >= data start.");
         }
     }
