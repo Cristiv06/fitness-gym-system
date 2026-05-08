@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="ro" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8"/>
+  <title>Membri</title>
+  <link rel="stylesheet" th:href="@{/css/style.css}"/>
+</head>
+<body class="list-page">
+<a th:href="@{/}" class="back-link">&#8592; Acasa</a>
+<h1>Membri</h1>
+<div class="controls">
+  <form method="get" th:action="@{/members}" class="page-size-form">
+    <input type="hidden" name="sort" th:value="${sort}"/>
+    <input type="hidden" name="dir" th:value="${dir}"/>
+    <label>Linii per pagina:
+      <select name="size" onchange="this.form.submit()">
+        <option value="5"  th:selected="${size == 5}">5</option>
+        <option value="10" th:selected="${size == 10}">10</option>
+        <option value="20" th:selected="${size == 20}">20</option>
+        <option value="50" th:selected="${size == 50}">50</option>
+      </select>
+    </label>
+  </form>
+</div>
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>
+        <a th:href="@{/members(page=0,size=${size},sort='fullName',dir=${sort == 'fullName' && dir == 'asc' ? 'desc' : 'asc'})}">
+          Nume complet
+          <span th:if="${sort == 'fullName'}" th:text="${dir == 'asc' ? '▲' : '▼'}"></span>
+        </a>
+      </th>
+      <th>
+        <a th:href="@{/members(page=0,size=${size},sort='email',dir=${sort == 'email' && dir == 'asc' ? 'desc' : 'asc'})}">
+          Email
+          <span th:if="${sort == 'email'}" th:text="${dir == 'asc' ? '▲' : '▼'}"></span>
+        </a>
+      </th>
+      <th>Telefon</th>
+      <th>Activ</th>
+      <th>
+        <a th:href="@{/members(page=0,size=${size},sort='createdAt',dir=${sort == 'createdAt' && dir == 'asc' ? 'desc' : 'asc'})}">
+          Creat la
+          <span th:if="${sort == 'createdAt'}" th:text="${dir == 'asc' ? '▲' : '▼'}"></span>
+        </a>
+      </th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr th:each="m : ${membersPage.content}">
+      <td th:text="${m.memberId}"></td>
+      <td th:text="${m.fullName}"></td>
+      <td th:text="${m.email}"></td>
+      <td th:text="${m.phone}"></td>
+      <td>
+        <span th:if="${m.active}" class="badge-active">Da</span>
+        <span th:unless="${m.active}" class="badge-inactive">Nu</span>
+      </td>
+      <td th:text="${#temporals.format(m.createdAt, 'dd.MM.yyyy HH:mm')}"></td>
+    </tr>
+    <tr th:if="${membersPage.empty}">
+      <td colspan="6">Nu exista membri.</td>
+    </tr>
+  </tbody>
+</table>
+<div class="pagination">
+  <a th:href="@{/members(page=0,size=${size},sort=${sort},dir=${dir})}" th:classappend="${membersPage.first ? 'disabled' : ''}">&#171;</a>
+  <a th:href="@{/members(page=${membersPage.number - 1},size=${size},sort=${sort},dir=${dir})}" th:classappend="${membersPage.first ? 'disabled' : ''}">&#8249;</a>
+  <span th:each="i : ${#numbers.sequence(0, membersPage.totalPages - 1)}"
+        th:if="${membersPage.totalPages <= 7 || (i >= membersPage.number - 2 && i <= membersPage.number + 2)}">
+    <a th:href="@{/members(page=${i},size=${size},sort=${sort},dir=${dir})}"
+       th:text="${i + 1}"
+       th:classappend="${i == membersPage.number ? 'active' : ''}"></a>
+  </span>
+  <a th:href="@{/members(page=${membersPage.number + 1},size=${size},sort=${sort},dir=${dir})}" th:classappend="${membersPage.last ? 'disabled' : ''}">&#8250;</a>
+  <a th:href="@{/members(page=${membersPage.totalPages - 1},size=${size},sort=${sort},dir=${dir})}" th:classappend="${membersPage.last ? 'disabled' : ''}">&#187;</a>
+</div>
+<p class="pag-info">Pagina <span th:text="${membersPage.number + 1}"></span> din <span th:text="${membersPage.totalPages}"></span> &middot; Total: <span th:text="${membersPage.totalElements}"></span></p>
+</body>
+</html>

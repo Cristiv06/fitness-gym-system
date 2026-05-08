@@ -10,6 +10,8 @@ import com.fitness.gym.repository.TrainerRepository;
 import com.fitness.gym.service.TrainerService;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +41,12 @@ public class TrainerServiceImpl implements TrainerService {
     @Transactional(readOnly = true)
     public List<TrainerResponse> findAll() {
         return repository.findAll().stream().map(this::toResponse).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<TrainerResponse> findAll(Pageable pageable) {
+        return repository.findAll(pageable).map(this::toResponse);
     }
 
     @Override

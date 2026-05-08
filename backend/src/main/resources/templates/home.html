@@ -21,6 +21,9 @@
     <p th:if="${#authentication == null || !#authentication.isAuthenticated()}">
         Pentru documentatia API (Swagger), autentifica-te mai intai.
     </p>
+    <p><a th:href="@{/members}">Membri</a></p>
+    <p><a th:href="@{/trainers}">Antrenori</a></p>
+    <p><a th:href="@{/plans}">Planuri abonament</a></p>
 </div>
 </body>
 </html>

@@ -10,6 +10,8 @@ import com.fitness.gym.repository.SubscriptionRepository;
 import com.fitness.gym.service.MembershipPlanService;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,6 +41,12 @@ public class MembershipPlanServiceImpl implements MembershipPlanService {
     @Transactional(readOnly = true)
     public List<MembershipPlanResponse> findAll() {
         return repository.findAll().stream().map(this::toResponse).toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public Page<MembershipPlanResponse> findAll(Pageable pageable) {
+        return repository.findAll(pageable).map(this::toResponse);
     }
 
     @Override
