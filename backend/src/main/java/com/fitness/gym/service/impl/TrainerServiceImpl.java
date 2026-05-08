@@ -9,9 +9,11 @@ import com.fitness.gym.repository.GymClassRepository;
 import com.fitness.gym.repository.TrainerRepository;
 import com.fitness.gym.service.TrainerService;
 import java.util.List;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @Transactional
 public class TrainerServiceImpl implements TrainerService {
@@ -28,7 +30,9 @@ public class TrainerServiceImpl implements TrainerService {
     public TrainerResponse create(TrainerRequest request) {
         Trainer t = new Trainer();
         apply(t, request);
-        return toResponse(repository.save(t));
+        TrainerResponse response = toResponse(repository.save(t));
+        log.info("Trainer created: id={}, name={}", response.trainerId(), response.fullName());
+        return response;
     }
 
     @Override
@@ -47,6 +51,7 @@ public class TrainerServiceImpl implements TrainerService {
     public TrainerResponse update(Long trainerId, TrainerRequest request) {
         Trainer t = load(trainerId);
         apply(t, request);
+        log.info("Trainer updated: id={}", trainerId);
         return toResponse(repository.save(t));
     }
 
@@ -54,9 +59,11 @@ public class TrainerServiceImpl implements TrainerService {
     public void delete(Long trainerId) {
         load(trainerId);
         if (gymClassRepository.existsByTrainer_TrainerId(trainerId)) {
+            log.warn("Cannot delete trainer id={}: assigned to gym classes", trainerId);
             throw new BadRequestException("Nu se poate sterge antrenorul: exista clase asociate.");
         }
         repository.deleteById(trainerId);
+        log.info("Trainer deleted: id={}", trainerId);
     }
 
     private Trainer load(Long id) {

@@ -13,9 +13,11 @@ import com.fitness.gym.repository.GymClassRepository;
 import com.fitness.gym.repository.MemberRepository;
 import com.fitness.gym.service.ClassEnrollmentService;
 import java.util.List;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @Transactional
 public class ClassEnrollmentServiceImpl implements ClassEnrollmentService {
@@ -39,6 +41,7 @@ public class ClassEnrollmentServiceImpl implements ClassEnrollmentService {
                 .findById(request.memberId())
                 .orElseThrow(() -> new NotFoundException("Membru negasit: " + request.memberId()));
         if (Boolean.FALSE.equals(member.getActive())) {
+            log.warn("Enrollment rejected: member id={} is inactive", request.memberId());
             throw new BadRequestException("Membrul este inactiv si nu se poate inscrie.");
         }
         GymClass gymClass = gymClassRepository
@@ -47,16 +50,21 @@ public class ClassEnrollmentServiceImpl implements ClassEnrollmentService {
         enrollmentRepository
                 .findByMember_MemberIdAndGymClass_ClassId(request.memberId(), request.classId())
                 .ifPresent(e -> {
+                    log.warn("Duplicate enrollment: memberId={}, classId={}", request.memberId(), request.classId());
                     throw new ConflictException("Membrul este deja inscris la aceasta clasa.");
                 });
         long count = enrollmentRepository.countByGymClass_ClassId(request.classId());
         if (count >= gymClass.getMaxParticipants()) {
+            log.warn("Class full: classId={}, capacity={}", request.classId(), gymClass.getMaxParticipants());
             throw new BadRequestException("Clasa a atins capacitatea maxima.");
         }
         ClassEnrollment en = new ClassEnrollment();
         en.setMember(member);
         en.setGymClass(gymClass);
-        return toResponse(enrollmentRepository.save(en));
+        ClassEnrollmentResponse response = toResponse(enrollmentRepository.save(en));
+        log.info("Enrollment created: id={}, memberId={}, classId={}",
+                response.enrollmentId(), response.memberId(), response.classId());
+        return response;
     }
 
     @Override
@@ -90,12 +98,14 @@ public class ClassEnrollmentServiceImpl implements ClassEnrollmentService {
                 .orElseThrow(() -> new NotFoundException("Clasa negasita: " + request.classId()));
         en.setMember(member);
         en.setGymClass(gymClass);
+        log.info("Enrollment updated: id={}", enrollmentId);
         return toResponse(enrollmentRepository.save(en));
     }
 
     @Override
     public void delete(Long enrollmentId) {
         enrollmentRepository.deleteById(load(enrollmentId).getEnrollmentId());
+        log.info("Enrollment deleted: id={}", enrollmentId);
     }
 
     private ClassEnrollment load(Long id) {
