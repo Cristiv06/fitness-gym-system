@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { getCurrentSession, login, logout } from "./api/auth";
 import { apiFetch } from "./api/http";
 import { resources } from "./config/resources";
@@ -38,6 +38,30 @@ const USER_SECTIONS = [
       { key: "startTime", label: "Inceput" },
       { key: "endTime", label: "Sfarsit" },
       { key: "maxParticipants", label: "Locuri max" }
+    ]
+  },
+  {
+    key: "subscriptions",
+    label: "Abonamentele mele",
+    endpoint: "/api/subscriptions",
+    idField: "subscriptionId",
+    columns: [
+      { key: "memberId", label: "Membru ID" },
+      { key: "planId", label: "Plan ID" },
+      { key: "startDate", label: "Data start" },
+      { key: "endDate", label: "Data sfarsit" },
+      { key: "status", label: "Status" }
+    ]
+  },
+  {
+    key: "check-ins",
+    label: "Check-in-urile mele",
+    endpoint: "/api/check-ins",
+    idField: "checkinId",
+    columns: [
+      { key: "checkinId", label: "ID" },
+      { key: "memberId", label: "Membru ID" },
+      { key: "checkinTime", label: "Data / Ora" }
     ]
   }
 ];
@@ -82,7 +106,7 @@ function validateForm(resource, formData) {
   return "";
 }
 
-function applySortAndFilter(rows, columns, searchTerm, sortField, sortDir) {
+function clientSortAndFilter(rows, columns, searchTerm, sortField, sortDir) {
   let result = rows;
   const term = searchTerm.trim().toLowerCase();
   if (term) {
@@ -112,9 +136,7 @@ function SortableHeader({ column, label, sortField, sortDir, onSort }) {
   return (
     <th className="sortable-th" onClick={() => onSort(column)}>
       {label ?? column}
-      <span className="sort-indicator">
-        {active ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}
-      </span>
+      <span className="sort-indicator">{active ? (sortDir === "asc" ? " ▲" : " ▼") : " ↕"}</span>
     </th>
   );
 }
@@ -141,7 +163,12 @@ function PaginationBar({ page, totalPages, total, onPrev, onNext }) {
 }
 
 function CrudPanel({ resource, canWrite, roleLabel }) {
+  const pageSize = 7;
+  const loadIdRef = useRef(0);
+
   const [rows, setRows] = useState([]);
+  const [serverTotalPages, setServerTotalPages] = useState(1);
+  const [serverTotalRows, setServerTotalRows] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [formData, setFormData] = useState(() => emptyForm(resource));
@@ -151,45 +178,43 @@ function CrudPanel({ resource, canWrite, roleLabel }) {
   const [sortDir, setSortDir] = useState("asc");
   const [page, setPage] = useState(1);
   const [toast, setToast] = useState("");
-  const pageSize = 7;
+
+  const useServerPaging = Boolean(resource.pageEndpoint);
 
   const columns = useMemo(() => {
     const preferred = [resource.idField, ...resource.fields.map((f) => f.key)];
     return [...new Set(preferred)];
   }, [resource]);
 
-  const processedRows = useMemo(
-    () => applySortAndFilter(rows, columns, searchTerm, sortField, sortDir),
-    [rows, columns, searchTerm, sortField, sortDir]
-  );
-
-  const totalPages = Math.max(1, Math.ceil(processedRows.length / pageSize));
-  const pageRows = useMemo(() => {
-    const start = (page - 1) * pageSize;
-    return processedRows.slice(start, start + pageSize);
-  }, [processedRows, page]);
-
-  function toggleSort(col) {
-    if (col === sortField) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortField(col);
-      setSortDir("asc");
-    }
-    setPage(1);
-  }
-
-  async function loadData() {
+  async function loadDataWith(sf, sd, pg) {
+    const thisId = ++loadIdRef.current;
     setLoading(true);
     setError("");
     try {
-      const data = await apiFetch(resource.endpoint);
-      setRows(Array.isArray(data) ? data : []);
+      if (useServerPaging) {
+        const qs = new URLSearchParams({ page: pg - 1, size: pageSize });
+        if (sf) qs.set("sort", `${sf},${sd}`);
+        const json = await apiFetch(`${resource.pageEndpoint}?${qs}`);
+        if (thisId !== loadIdRef.current) return;
+        setRows(json.content ?? []);
+        setServerTotalPages(json.totalPages || 1);
+        setServerTotalRows(json.totalElements || 0);
+      } else {
+        const data = await apiFetch(resource.endpoint);
+        if (thisId !== loadIdRef.current) return;
+        setRows(Array.isArray(data) ? data : []);
+      }
     } catch (e) {
+      if (thisId !== loadIdRef.current) return;
       setError(e.message);
     } finally {
+      if (thisId !== loadIdRef.current) return;
       setLoading(false);
     }
+  }
+
+  function loadData() {
+    return loadDataWith(sortField, sortDir, page);
   }
 
   useEffect(() => {
@@ -199,12 +224,33 @@ function CrudPanel({ resource, canWrite, roleLabel }) {
     setSortField(null);
     setSortDir("asc");
     setPage(1);
-    loadData();
+    setRows([]);
+    setServerTotalPages(1);
+    setServerTotalRows(0);
+    loadDataWith(null, "asc", 1);
   }, [resource.key]);
 
+  function toggleSort(col) {
+    const newField = col;
+    const newDir = col === sortField ? (sortDir === "asc" ? "desc" : "asc") : "asc";
+    setSortField(newField);
+    setSortDir(newDir);
+    setPage(1);
+    if (useServerPaging) {
+      loadDataWith(newField, newDir, 1);
+    }
+  }
+
+  function goToPage(newPage) {
+    setPage(newPage);
+    if (useServerPaging) {
+      loadDataWith(sortField, sortDir, newPage);
+    }
+  }
+
   useEffect(() => {
-    if (page > totalPages) setPage(totalPages);
-  }, [page, totalPages]);
+    if (page > displayTotalPages) setPage(displayTotalPages);
+  });
 
   function handleChange(key, value) {
     setFormData((prev) => ({ ...prev, [key]: value }));
@@ -226,15 +272,9 @@ function CrudPanel({ resource, canWrite, roleLabel }) {
 
   async function onSubmit(event) {
     event.preventDefault();
-    if (!canWrite) {
-      setError(`Rolul ${roleLabel} poate doar citi (GET).`);
-      return;
-    }
-    const validationMessage = validateForm(resource, formData);
-    if (validationMessage) {
-      setError(validationMessage);
-      return;
-    }
+    if (!canWrite) { setError(`Rolul ${roleLabel} poate doar citi (GET).`); return; }
+    const msg = validateForm(resource, formData);
+    if (msg) { setError(msg); return; }
     const payload = {};
     for (const field of resource.fields) {
       const converted = toPayload(formData[field.key], field.type);
@@ -244,13 +284,10 @@ function CrudPanel({ resource, canWrite, roleLabel }) {
       if (editingId == null) {
         await apiFetch(resource.endpoint, { method: "POST", body: JSON.stringify(payload) });
       } else {
-        await apiFetch(`${resource.endpoint}/${editingId}`, {
-          method: "PUT",
-          body: JSON.stringify(payload)
-        });
+        await apiFetch(`${resource.endpoint}/${editingId}`, { method: "PUT", body: JSON.stringify(payload) });
       }
       clearForm();
-      await loadData();
+      await loadDataWith(sortField, sortDir, page);
       setToast(editingId == null ? "Element creat cu succes." : "Element actualizat cu succes.");
       setTimeout(() => setToast(""), 2500);
     } catch (e) {
@@ -259,13 +296,10 @@ function CrudPanel({ resource, canWrite, roleLabel }) {
   }
 
   async function onDelete(id) {
-    if (!canWrite) {
-      setError(`Rolul ${roleLabel} poate doar citi (GET).`);
-      return;
-    }
+    if (!canWrite) { setError(`Rolul ${roleLabel} poate doar citi (GET).`); return; }
     try {
       await apiFetch(`${resource.endpoint}/${id}`, { method: "DELETE" });
-      await loadData();
+      await loadDataWith(sortField, sortDir, page);
       setToast("Element sters cu succes.");
       setTimeout(() => setToast(""), 2500);
     } catch (e) {
@@ -273,33 +307,53 @@ function CrudPanel({ resource, canWrite, roleLabel }) {
     }
   }
 
+  const processedRows = useMemo(() => {
+    if (useServerPaging) {
+      const term = searchTerm.trim().toLowerCase();
+      if (!term) return rows;
+      return rows.filter((row) =>
+        columns.some((col) => formatCell(row[col]).toLowerCase().includes(term))
+      );
+    }
+    return clientSortAndFilter(rows, columns, searchTerm, sortField, sortDir);
+  }, [rows, columns, searchTerm, sortField, sortDir, useServerPaging]);
+
+  const displayTotalPages = useServerPaging
+    ? serverTotalPages
+    : Math.max(1, Math.ceil(processedRows.length / pageSize));
+
+  const displayTotalRows = useServerPaging ? serverTotalRows : processedRows.length;
+
+  const pageRows = useServerPaging
+    ? processedRows
+    : processedRows.slice((page - 1) * pageSize, page * pageSize);
+
   return (
     <div className="panel">
       <div className="panel-header">
         <div>
           <h2>{resource.label}</h2>
-          <p className="subtle-text">Gestionare completa pentru resursa selectata.</p>
+          <p className="subtle-text">
+            {useServerPaging ? "Sortare si paginare server-side." : "Gestionare completa pentru resursa selectata."}
+          </p>
         </div>
         <div className="panel-header-actions">
           <input
             className="search-input"
             placeholder="Cauta in tabel..."
             value={searchTerm}
-            onChange={(e) => {
-              setSearchTerm(e.target.value);
-              setPage(1);
-            }}
+            onChange={(e) => { setSearchTerm(e.target.value); }}
           />
-          <button onClick={loadData} className="secondary-btn" type="button">
-            Refresh
-          </button>
+          <button onClick={loadData} className="secondary-btn" type="button">Refresh</button>
         </div>
       </div>
 
       <div className="stats-row">
-        <span className="stat-chip">Rol curent: {roleLabel}</span>
-        <span className="stat-chip">Total: {rows.length}</span>
-        <span className="stat-chip">Filtrate: {processedRows.length}</span>
+        <span className="stat-chip">Rol: {roleLabel}</span>
+        <span className="stat-chip">
+          {useServerPaging ? `Total DB: ${serverTotalRows}` : `Total: ${rows.length}`}
+        </span>
+        {useServerPaging && <span className="stat-chip server-badge">Backend sort ✓</span>}
       </div>
 
       {toast ? <p className="success-text">{toast}</p> : null}
@@ -325,19 +379,15 @@ function CrudPanel({ resource, canWrite, roleLabel }) {
               >
                 <option value="">Select...</option>
                 {field.options.map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
+                  <option key={opt} value={opt}>{opt}</option>
                 ))}
               </select>
             ) : (
               <input
                 type={
-                  field.type === "csv-number-array"
-                    ? "text"
-                    : field.type === "datetime-local"
-                      ? "datetime-local"
-                      : field.type
+                  field.type === "csv-number-array" ? "text"
+                  : field.type === "datetime-local" ? "datetime-local"
+                  : field.type
                 }
                 step={field.step}
                 value={formData[field.key]}
@@ -382,22 +432,8 @@ function CrudPanel({ resource, canWrite, roleLabel }) {
                   <td key={`${row[resource.idField]}-${col}`}>{formatCell(row[col])}</td>
                 ))}
                 <td className="actions-cell">
-                  <button
-                    type="button"
-                    className="secondary-btn"
-                    onClick={() => startEdit(row)}
-                    disabled={!canWrite}
-                  >
-                    Edit
-                  </button>
-                  <button
-                    type="button"
-                    className="danger-btn"
-                    onClick={() => onDelete(row[resource.idField])}
-                    disabled={!canWrite}
-                  >
-                    Delete
-                  </button>
+                  <button type="button" className="secondary-btn" onClick={() => startEdit(row)} disabled={!canWrite}>Edit</button>
+                  <button type="button" className="danger-btn" onClick={() => onDelete(row[resource.idField])} disabled={!canWrite}>Delete</button>
                 </td>
               </tr>
             ))}
@@ -408,10 +444,10 @@ function CrudPanel({ resource, canWrite, roleLabel }) {
         ) : null}
         <PaginationBar
           page={page}
-          totalPages={totalPages}
-          total={processedRows.length}
-          onPrev={() => setPage((p) => Math.max(1, p - 1))}
-          onNext={() => setPage((p) => Math.min(totalPages, p + 1))}
+          totalPages={displayTotalPages}
+          total={displayTotalRows}
+          onPrev={() => goToPage(Math.max(1, page - 1))}
+          onNext={() => goToPage(Math.min(displayTotalPages, page + 1))}
         />
       </div>
     </div>
@@ -427,31 +463,33 @@ function UserPortal({ onLogout }) {
   const [sortField, setSortField] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
   const [page, setPage] = useState(1);
+  const loadIdRef = useRef(0);
   const pageSize = 8;
 
   const section = USER_SECTIONS.find((s) => s.key === activeSectionKey);
   const colKeys = section.columns.map((c) => c.key);
 
   function toggleSort(col) {
-    if (col === sortField) {
-      setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setSortField(col);
-      setSortDir("asc");
-    }
+    const newDir = col === sortField ? (sortDir === "asc" ? "desc" : "asc") : "asc";
+    setSortField(col);
+    setSortDir(newDir);
     setPage(1);
   }
 
   async function loadData() {
+    const thisId = ++loadIdRef.current;
     setLoading(true);
     setError("");
     setRows([]);
     try {
       const data = await apiFetch(section.endpoint);
+      if (thisId !== loadIdRef.current) return;
       setRows(Array.isArray(data) ? data : []);
     } catch (e) {
+      if (thisId !== loadIdRef.current) return;
       setError(e.message);
     } finally {
+      if (thisId !== loadIdRef.current) return;
       setLoading(false);
     }
   }
@@ -465,7 +503,7 @@ function UserPortal({ onLogout }) {
   }, [activeSectionKey]);
 
   const processedRows = useMemo(
-    () => applySortAndFilter(rows, colKeys, searchTerm, sortField, sortDir),
+    () => clientSortAndFilter(rows, colKeys, searchTerm, sortField, sortDir),
     [rows, colKeys, searchTerm, sortField, sortDir]
   );
 
@@ -495,9 +533,7 @@ function UserPortal({ onLogout }) {
             </button>
           ))}
         </nav>
-        <button type="button" className="portal-logout-btn" onClick={onLogout}>
-          Logout
-        </button>
+        <button type="button" className="portal-logout-btn" onClick={onLogout}>Logout</button>
       </header>
 
       <main className="portal-main">
@@ -513,14 +549,9 @@ function UserPortal({ onLogout }) {
               className="search-input"
               placeholder="Cauta..."
               value={searchTerm}
-              onChange={(e) => {
-                setSearchTerm(e.target.value);
-                setPage(1);
-              }}
+              onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
             />
-            <button type="button" className="secondary-btn" onClick={loadData}>
-              Refresh
-            </button>
+            <button type="button" className="secondary-btn" onClick={loadData}>Refresh</button>
           </div>
         </div>
 
@@ -528,7 +559,7 @@ function UserPortal({ onLogout }) {
 
         <div className="portal-card">
           <div className="table-wrap">
-            {loading ? <p className="subtle-text">Se incarca datele...</p> : null}
+            {loading ? <p className="subtle-text" style={{ padding: "12px 16px" }}>Se incarca datele...</p> : null}
             <table>
               <thead>
                 <tr>
@@ -548,14 +579,19 @@ function UserPortal({ onLogout }) {
                 {pageRows.map((row) => (
                   <tr key={row[section.idField]}>
                     {section.columns.map((col) => (
-                      <td key={col.key}>{formatCell(row[col.key])}</td>
+                      <td
+                        key={col.key}
+                        className={col.key === "status" ? `status-cell status-${formatCell(row[col.key]).toLowerCase()}` : ""}
+                      >
+                        {formatCell(row[col.key])}
+                      </td>
                     ))}
                   </tr>
                 ))}
               </tbody>
             </table>
             {!loading && pageRows.length === 0 ? (
-              <p className="empty-text">Nu exista inregistrari.</p>
+              <p className="empty-text" style={{ padding: "12px 16px" }}>Nu exista inregistrari.</p>
             ) : null}
             <PaginationBar
               page={page}
@@ -603,19 +639,10 @@ function LoginView({ onSuccess }) {
         </label>
         <label className="field">
           <span>Password</span>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
         </label>
         <label className="checkbox-field">
-          <input
-            type="checkbox"
-            checked={rememberMe}
-            onChange={(e) => setRememberMe(e.target.checked)}
-          />
+          <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
           Remember me
         </label>
         <button type="submit" disabled={loading}>
@@ -669,17 +696,9 @@ export default function App() {
     }
   }
 
-  if (isCheckingAuth) {
-    return <div className="center-box">Se verifica sesiunea...</div>;
-  }
-
-  if (!isAuthenticated) {
-    return <LoginView onSuccess={refreshSession} />;
-  }
-
-  if (role === "user") {
-    return <UserPortal onLogout={handleLogout} />;
-  }
+  if (isCheckingAuth) return <div className="center-box">Se verifica sesiunea...</div>;
+  if (!isAuthenticated) return <LoginView onSuccess={refreshSession} />;
+  if (role === "user") return <UserPortal onLogout={handleLogout} />;
 
   return (
     <div className="layout">
@@ -704,12 +723,8 @@ export default function App() {
         <header className="topbar">
           <h1>Fitness Gym Dashboard</h1>
           <div className="topbar-actions">
-            <a href="/swagger-ui/index.html" target="_blank" rel="noreferrer">
-              Swagger
-            </a>
-            <button type="button" className="secondary-btn" onClick={handleLogout}>
-              Logout
-            </button>
+            <a href="/swagger-ui/index.html" target="_blank" rel="noreferrer">Swagger</a>
+            <button type="button" className="secondary-btn" onClick={handleLogout}>Logout</button>
           </div>
         </header>
         {authError ? <p className="error-text">{authError}</p> : null}
