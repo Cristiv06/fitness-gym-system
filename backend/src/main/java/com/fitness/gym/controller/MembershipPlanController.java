@@ -5,6 +5,8 @@ import com.fitness.gym.dto.MembershipPlanResponse;
 import com.fitness.gym.service.MembershipPlanService;
 import jakarta.validation.Valid;
 import java.util.List;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -35,6 +37,11 @@ public class MembershipPlanController {
     @GetMapping
     public List<MembershipPlanResponse> findAll() {
         return service.findAll();
+    }
+
+    @GetMapping("/page")
+    public Page<MembershipPlanResponse> findAllPaged(Pageable pageable) {
+        return service.findAll(pageable);
     }
 
     @GetMapping("/{planId}")
