@@ -94,6 +94,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(
                         auth -> auth.requestMatchers("/", "/home", "/login", "/error", "/css/**")
                                 .permitAll()
+                                .requestMatchers(HttpMethod.POST, "/api/auth/register")
+                                .permitAll()
                                 .requestMatchers(new AntPathRequestMatcher("/api/**"))
                                 .access(API_ACCESS)
                                 .requestMatchers(

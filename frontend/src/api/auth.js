@@ -80,27 +80,74 @@ export async function logout() {
 }
 
 export async function getCurrentSession() {
-  const response = await fetch("/api/members", {
+  const response = await fetch("/api/auth/me", {
     method: "GET",
     credentials: "include"
   });
   if (response.status === 401) {
-    return { authenticated: false, role: "guest" };
+    return { authenticated: false, role: "guest", roles: [] };
   }
   if (!response.ok) {
     throw new Error("Unable to validate session.");
   }
+  const me = await response.json();
+  const roles = Array.isArray(me.roles) ? me.roles : [];
+  const role = roles.includes("ROLE_ADMIN") ? "admin" : "user";
+  return { authenticated: true, role, ...me, roles };
+}
 
-  // Role probe: USER gets 403 on write methods, ADMIN usually gets 400 for invalid payload.
-  const probe = await fetch("/api/members", {
+export async function registerNormalAccount(payload) {
+  const response = await fetch("/api/auth/register", {
     method: "POST",
     credentials: "include",
     headers: {
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({})
+    body: JSON.stringify(payload)
   });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || "Account creation failed.");
+  }
+  return response.json();
+}
 
-  const role = probe.status === 403 ? "user" : "admin";
-  return { authenticated: true, role };
+export async function createAdminAccount(payload) {
+  const response = await fetch("/api/auth/admin/create-account", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || "Admin account creation failed.");
+  }
+  return response.json();
+}
+
+export async function getMySubscriptions() {
+  const response = await fetch("/api/auth/me/subscriptions", {
+    method: "GET",
+    credentials: "include"
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || "Cannot load subscriptions.");
+  }
+  return response.json();
+}
+
+export async function getMyClasses() {
+  const response = await fetch("/api/auth/me/classes", {
+    method: "GET",
+    credentials: "include"
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || "Cannot load classes.");
+  }
+  return response.json();
 }

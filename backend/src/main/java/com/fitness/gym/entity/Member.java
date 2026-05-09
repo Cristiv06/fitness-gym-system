@@ -31,6 +31,9 @@ public class Member {
     @Column(name = "email", nullable = false, unique = true, length = 150)
     private String email;
 
+    @Column(name = "username", unique = true, length = 50)
+    private String username;
+
     @Column(name = "full_name", nullable = false, length = 120)
     private String fullName;
 

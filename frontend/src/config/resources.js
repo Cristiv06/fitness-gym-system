@@ -3,6 +3,7 @@ export const resources = [
     key: "members",
     label: "Members",
     endpoint: "/api/members",
+    pageEndpoint: "/api/members/page",
     idField: "memberId",
     fields: [
       { key: "email", label: "Email", type: "text", required: true },
@@ -26,6 +27,7 @@ export const resources = [
     key: "membership-plans",
     label: "Membership Plans",
     endpoint: "/api/membership-plans",
+    pageEndpoint: "/api/membership-plans/page",
     idField: "planId",
     fields: [
       { key: "name", label: "Name", type: "text", required: true },
@@ -56,6 +58,7 @@ export const resources = [
     key: "trainers",
     label: "Trainers",
     endpoint: "/api/trainers",
+    pageEndpoint: "/api/trainers/page",
     idField: "trainerId",
     fields: [
       { key: "fullName", label: "Full Name", type: "text", required: true },
