@@ -43,9 +43,8 @@ const USER_SECTIONS = [
     endpoint: "/api/auth/me/trainer-classes",
     idField: "classId",
     columns: [
-      { key: "classId", label: "ID Clasa" },
       { key: "title", label: "Titlu" },
-      { key: "trainerId", label: "Trainer ID" },
+      { key: "trainerName", label: "Antrenor" },
       { key: "startTime", label: "Inceput" },
       { key: "endTime", label: "Sfarsit" }
     ]

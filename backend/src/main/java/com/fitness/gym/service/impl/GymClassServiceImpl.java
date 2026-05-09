@@ -99,6 +99,7 @@ public class GymClassServiceImpl implements GymClassService {
         return new GymClassResponse(
                 gc.getClassId(),
                 gc.getTrainer().getTrainerId(),
+                gc.getTrainer().getFullName(),
                 gc.getRoom().getRoomId(),
                 gc.getTitle(),
                 gc.getStartTime(),

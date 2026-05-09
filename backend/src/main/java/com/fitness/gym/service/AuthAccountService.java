@@ -224,6 +224,7 @@ public class AuthAccountService {
         return new GymClassResponse(
                 gymClass.getClassId(),
                 gymClass.getTrainer().getTrainerId(),
+                gymClass.getTrainer().getFullName(),
                 gymClass.getRoom().getRoomId(),
                 gymClass.getTitle(),
                 gymClass.getStartTime(),
