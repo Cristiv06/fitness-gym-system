@@ -4,18 +4,22 @@ import com.fitness.gym.dto.AccountType;
 import com.fitness.gym.dto.AdminCreateAccountRequest;
 import com.fitness.gym.dto.AuthMeResponse;
 import com.fitness.gym.dto.ClassEnrollmentResponse;
+import com.fitness.gym.dto.CreateMyGymClassRequest;
+import com.fitness.gym.dto.EnrollMyClassRequest;
 import com.fitness.gym.dto.GymClassResponse;
 import com.fitness.gym.dto.RegisterAccountRequest;
 import com.fitness.gym.dto.SubscriptionResponse;
 import com.fitness.gym.entity.ClassEnrollment;
 import com.fitness.gym.entity.GymClass;
 import com.fitness.gym.entity.Member;
+import com.fitness.gym.entity.Room;
 import com.fitness.gym.entity.Trainer;
 import com.fitness.gym.exception.BadRequestException;
 import com.fitness.gym.exception.ConflictException;
 import com.fitness.gym.repository.ClassEnrollmentRepository;
 import com.fitness.gym.repository.GymClassRepository;
 import com.fitness.gym.repository.MemberRepository;
+import com.fitness.gym.repository.RoomRepository;
 import com.fitness.gym.repository.SubscriptionRepository;
 import com.fitness.gym.repository.TrainerRepository;
 import java.util.List;
@@ -35,6 +39,7 @@ public class AuthAccountService {
     private final SubscriptionRepository subscriptionRepository;
     private final ClassEnrollmentRepository classEnrollmentRepository;
     private final GymClassRepository gymClassRepository;
+    private final RoomRepository roomRepository;
 
     public AuthAccountService(
             JdbcTemplate jdbcTemplate,
@@ -43,7 +48,8 @@ public class AuthAccountService {
             TrainerRepository trainerRepository,
             SubscriptionRepository subscriptionRepository,
             ClassEnrollmentRepository classEnrollmentRepository,
-            GymClassRepository gymClassRepository) {
+            GymClassRepository gymClassRepository,
+            RoomRepository roomRepository) {
         this.jdbcTemplate = jdbcTemplate;
         this.passwordEncoder = passwordEncoder;
         this.memberRepository = memberRepository;
@@ -51,6 +57,7 @@ public class AuthAccountService {
         this.subscriptionRepository = subscriptionRepository;
         this.classEnrollmentRepository = classEnrollmentRepository;
         this.gymClassRepository = gymClassRepository;
+        this.roomRepository = roomRepository;
     }
 
     public AuthMeResponse registerUser(RegisterAccountRequest request) {
@@ -143,6 +150,62 @@ public class AuthAccountService {
                     .toList();
         }
         throw new BadRequestException("Contul nu are profil de membru sau antrenor.");
+    }
+
+    @Transactional(readOnly = true)
+    public List<GymClassResponse> getTrainerClassesForMember(String username) {
+        Member member = memberRepository.findByUsername(username)
+                .orElseThrow(() -> new BadRequestException("Acest cont nu are profil de membru."));
+        return gymClassRepository.findAll().stream()
+                .filter(gymClass -> gymClass.getMaxParticipants() == null
+                        || classEnrollmentRepository.countByGymClass_ClassId(gymClass.getClassId()) < gymClass.getMaxParticipants())
+                .map(this::toGymClassResponse)
+                .toList();
+    }
+
+    public GymClassResponse createMyClass(String username, CreateMyGymClassRequest request) {
+        Trainer trainer = trainerRepository.findByUsername(username)
+                .orElseThrow(() -> new BadRequestException("Acest cont nu are profil de antrenor."));
+        Room room = roomRepository.findById(request.roomId())
+                .orElseThrow(() -> new BadRequestException("Sala nu exista: " + request.roomId()));
+        if (!request.endTime().isAfter(request.startTime())) {
+            throw new BadRequestException("Ora de final trebuie sa fie dupa ora de start.");
+        }
+        GymClass gymClass = new GymClass();
+        gymClass.setTrainer(trainer);
+        gymClass.setRoom(room);
+        gymClass.setTitle(request.title());
+        gymClass.setStartTime(request.startTime());
+        gymClass.setEndTime(request.endTime());
+        gymClass.setMaxParticipants(request.maxParticipants());
+        return toGymClassResponse(gymClassRepository.save(gymClass));
+    }
+
+    public ClassEnrollmentResponse enrollToClass(String username, EnrollMyClassRequest request) {
+        Member member = memberRepository.findByUsername(username)
+                .orElseThrow(() -> new BadRequestException("Acest cont nu are profil de membru."));
+        GymClass gymClass = gymClassRepository.findById(request.classId())
+                .orElseThrow(() -> new BadRequestException("Clasa nu exista: " + request.classId()));
+
+        classEnrollmentRepository.findByMember_MemberIdAndGymClass_ClassId(member.getMemberId(), gymClass.getClassId())
+                .ifPresent(existing -> {
+                    throw new ConflictException("Esti deja inscris la aceasta clasa.");
+                });
+
+        long currentEnrollments = classEnrollmentRepository.countByGymClass_ClassId(gymClass.getClassId());
+        if (gymClass.getMaxParticipants() != null && currentEnrollments >= gymClass.getMaxParticipants()) {
+            throw new BadRequestException("Clasa este deja completa.");
+        }
+
+        ClassEnrollment enrollment = new ClassEnrollment();
+        enrollment.setMember(member);
+        enrollment.setGymClass(gymClass);
+        ClassEnrollment saved = classEnrollmentRepository.save(enrollment);
+        return new ClassEnrollmentResponse(
+                saved.getEnrollmentId(),
+                saved.getMember().getMemberId(),
+                saved.getGymClass().getClassId(),
+                saved.getEnrolledAt());
     }
 
     @Transactional(readOnly = true)

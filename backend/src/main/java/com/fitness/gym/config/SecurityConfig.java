@@ -96,6 +96,11 @@ public class SecurityConfig {
                                 .permitAll()
                                 .requestMatchers(HttpMethod.POST, "/api/auth/register")
                                 .permitAll()
+                                .requestMatchers(
+                                        HttpMethod.POST,
+                                        "/api/auth/me/classes",
+                                        "/api/auth/me/enrollments")
+                                .hasAnyRole("USER", "ADMIN")
                                 .requestMatchers(new AntPathRequestMatcher("/api/**"))
                                 .access(API_ACCESS)
                                 .requestMatchers(
