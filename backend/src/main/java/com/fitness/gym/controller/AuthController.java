@@ -3,6 +3,8 @@ package com.fitness.gym.controller;
 import com.fitness.gym.dto.AdminCreateAccountRequest;
 import com.fitness.gym.dto.AuthMeResponse;
 import com.fitness.gym.dto.ClassEnrollmentResponse;
+import com.fitness.gym.dto.CreateMyGymClassRequest;
+import com.fitness.gym.dto.EnrollMyClassRequest;
 import com.fitness.gym.dto.GymClassResponse;
 import com.fitness.gym.dto.RegisterAccountRequest;
 import com.fitness.gym.dto.SubscriptionResponse;
@@ -57,8 +59,29 @@ public class AuthController {
         return authAccountService.getMyClasses(authentication.getName());
     }
 
+    @GetMapping("/me/trainer-classes")
+    public List<GymClassResponse> trainerClassesForMe(Authentication authentication) {
+        return authAccountService.getTrainerClassesForMember(authentication.getName());
+    }
+
+    @PostMapping("/me/classes")
+    @ResponseStatus(HttpStatus.CREATED)
+    public GymClassResponse createMyClass(
+            Authentication authentication,
+            @Valid @RequestBody CreateMyGymClassRequest request) {
+        return authAccountService.createMyClass(authentication.getName(), request);
+    }
+
     @GetMapping("/me/enrollments")
     public List<ClassEnrollmentResponse> myEnrollments(Authentication authentication) {
         return authAccountService.getMyEnrollments(authentication.getName());
+    }
+
+    @PostMapping("/me/enrollments")
+    @ResponseStatus(HttpStatus.CREATED)
+    public ClassEnrollmentResponse enrollToClass(
+            Authentication authentication,
+            @Valid @RequestBody EnrollMyClassRequest request) {
+        return authAccountService.enrollToClass(authentication.getName(), request);
     }
 }

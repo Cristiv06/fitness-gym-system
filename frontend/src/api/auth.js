@@ -46,6 +46,10 @@ export async function login({ username, password, rememberMe }) {
     response.ok ||
     response.redirected ||
     (response.status >= 300 && response.status < 400);
+  const redirectTarget = response.headers.get("location") || "";
+  if (redirectTarget.includes("error")) {
+    throw new Error("Email/username sau parola gresita.");
+  }
   if (!loginSucceeded) {
     throw new Error("Login failed. Verify username/password.");
   }
@@ -148,6 +152,50 @@ export async function getMyClasses() {
   if (!response.ok) {
     const text = await response.text();
     throw new Error(text || "Cannot load classes.");
+  }
+  return response.json();
+}
+
+export async function getTrainerClassesForMember() {
+  const response = await fetch("/api/auth/me/trainer-classes", {
+    method: "GET",
+    credentials: "include"
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || "Cannot load trainer classes.");
+  }
+  return response.json();
+}
+
+export async function createTrainerClass(payload) {
+  const response = await fetch("/api/auth/me/classes", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || "Cannot create class.");
+  }
+  return response.json();
+}
+
+export async function enrollToClass(classId) {
+  const response = await fetch("/api/auth/me/enrollments", {
+    method: "POST",
+    credentials: "include",
+    headers: {
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ classId })
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || "Cannot enroll to class.");
   }
   return response.json();
 }

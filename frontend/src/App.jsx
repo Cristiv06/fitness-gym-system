@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   createAdminAccount,
+  createTrainerClass,
+  enrollToClass,
   getCurrentSession,
+  getTrainerClassesForMember,
   login,
   logout,
   registerNormalAccount
@@ -32,6 +35,19 @@ const USER_SECTIONS = [
       { key: "startDate", label: "Data start" },
       { key: "endDate", label: "Data sfarsit" },
       { key: "status", label: "Status" }
+    ]
+  },
+  {
+    key: "trainer-classes",
+    label: "Clase antrenori",
+    endpoint: "/api/auth/me/trainer-classes",
+    idField: "classId",
+    columns: [
+      { key: "classId", label: "ID Clasa" },
+      { key: "title", label: "Titlu" },
+      { key: "trainerId", label: "Trainer ID" },
+      { key: "startTime", label: "Inceput" },
+      { key: "endTime", label: "Sfarsit" }
     ]
   }
 ];
@@ -425,24 +441,30 @@ function CrudPanel({ resource, canWrite, roleLabel }) {
 }
 
 function UserPortal({ onLogout, me }) {
+  const isTrainerOnly = Boolean(me?.trainerId) && !me?.memberId;
   const availableSections = useMemo(() => {
-    if (me?.trainerId && !me?.memberId) {
+    if (isTrainerOnly) {
       return USER_SECTIONS.filter((section) => section.key === "my-classes");
     }
-    if (me?.memberId && !me?.trainerId) {
-      return USER_SECTIONS;
-    }
     return USER_SECTIONS;
-  }, [me]);
+  }, [isTrainerOnly]);
 
   const [activeSectionKey, setActiveSectionKey] = useState(availableSections[0].key);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [toast, setToast] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [sortField, setSortField] = useState(null);
   const [sortDir, setSortDir] = useState("asc");
   const [page, setPage] = useState(1);
+  const [trainerClassForm, setTrainerClassForm] = useState({
+    roomId: "",
+    title: "",
+    startTime: "",
+    endTime: "",
+    maxParticipants: ""
+  });
   const loadIdRef = useRef(0);
   const pageSize = 8;
 
@@ -462,7 +484,10 @@ function UserPortal({ onLogout, me }) {
     setError("");
     setRows([]);
     try {
-      const data = await apiFetch(section.endpoint);
+      const data =
+        section.key === "trainer-classes"
+          ? await getTrainerClassesForMember()
+          : await apiFetch(section.endpoint);
       if (thisId !== loadIdRef.current) return;
       setRows(Array.isArray(data) ? data : []);
     } catch (e) {
@@ -471,6 +496,44 @@ function UserPortal({ onLogout, me }) {
     } finally {
       if (thisId !== loadIdRef.current) return;
       setLoading(false);
+    }
+  }
+
+  async function handleEnroll(classId) {
+    setError("");
+    setToast("");
+    try {
+      await enrollToClass(classId);
+      setToast("Inscriere realizata cu succes.");
+      await loadData();
+    } catch (e) {
+      setError(e.message);
+    }
+  }
+
+  async function handleTrainerCreateClass(event) {
+    event.preventDefault();
+    setError("");
+    setToast("");
+    try {
+      await createTrainerClass({
+        roomId: Number(trainerClassForm.roomId),
+        title: trainerClassForm.title,
+        startTime: trainerClassForm.startTime,
+        endTime: trainerClassForm.endTime,
+        maxParticipants: Number(trainerClassForm.maxParticipants)
+      });
+      setToast("Clasa creata cu succes.");
+      setTrainerClassForm({
+        roomId: "",
+        title: "",
+        startTime: "",
+        endTime: "",
+        maxParticipants: ""
+      });
+      await loadData();
+    } catch (e) {
+      setError(e.message);
     }
   }
 
@@ -539,7 +602,73 @@ function UserPortal({ onLogout, me }) {
           </div>
         </div>
 
+        {toast ? <p className="success-text">{toast}</p> : null}
         {error ? <p className="error-text">{error}</p> : null}
+
+        {isTrainerOnly ? (
+          <div className="panel" style={{ marginBottom: 12 }}>
+            <h3>Adauga clasa noua</h3>
+            <form className="form-grid" onSubmit={handleTrainerCreateClass}>
+              <label className="field">
+                <span>Room ID</span>
+                <input
+                  type="number"
+                  value={trainerClassForm.roomId}
+                  onChange={(e) =>
+                    setTrainerClassForm((prev) => ({ ...prev, roomId: e.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>Titlu</span>
+                <input
+                  value={trainerClassForm.title}
+                  onChange={(e) =>
+                    setTrainerClassForm((prev) => ({ ...prev, title: e.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>Start</span>
+                <input
+                  type="datetime-local"
+                  value={trainerClassForm.startTime}
+                  onChange={(e) =>
+                    setTrainerClassForm((prev) => ({ ...prev, startTime: e.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>End</span>
+                <input
+                  type="datetime-local"
+                  value={trainerClassForm.endTime}
+                  onChange={(e) =>
+                    setTrainerClassForm((prev) => ({ ...prev, endTime: e.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <label className="field">
+                <span>Locuri maxime</span>
+                <input
+                  type="number"
+                  value={trainerClassForm.maxParticipants}
+                  onChange={(e) =>
+                    setTrainerClassForm((prev) => ({ ...prev, maxParticipants: e.target.value }))
+                  }
+                  required
+                />
+              </label>
+              <div className="form-actions">
+                <button type="submit">Creeaza clasa</button>
+              </div>
+            </form>
+          </div>
+        ) : null}
 
         <div className="portal-card">
           <div className="table-wrap">
@@ -557,6 +686,7 @@ function UserPortal({ onLogout, me }) {
                       onSort={toggleSort}
                     />
                   ))}
+                  {section.key === "trainer-classes" ? <th>Actiuni</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -570,6 +700,13 @@ function UserPortal({ onLogout, me }) {
                         {formatCell(row[col.key])}
                       </td>
                     ))}
+                    {section.key === "trainer-classes" ? (
+                      <td className="actions-cell">
+                        <button type="button" onClick={() => handleEnroll(row.classId)}>
+                          Inscrie-ma
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
