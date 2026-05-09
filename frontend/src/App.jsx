@@ -14,33 +14,9 @@ import { resources } from "./config/resources";
 
 const USER_SECTIONS = [
   {
-    key: "membership-plans",
-    label: "Planuri abonament",
-    endpoint: "/api/membership-plans",
-    idField: "planId",
-    columns: [
-      { key: "name", label: "Nume" },
-      { key: "durationMonths", label: "Durata (luni)" },
-      { key: "price", label: "Pret (RON)" },
-      { key: "description", label: "Descriere" }
-    ]
-  },
-  {
-    key: "trainers",
-    label: "Antrenori",
-    endpoint: "/api/trainers",
-    idField: "trainerId",
-    columns: [
-      { key: "fullName", label: "Nume complet" },
-      { key: "specialization", label: "Specializare" },
-      { key: "phone", label: "Telefon" },
-      { key: "email", label: "Email" }
-    ]
-  },
-  {
-    key: "gym-classes",
-    label: "Clase disponibile",
-    endpoint: "/api/gym-classes",
+    key: "my-classes",
+    label: "Clasele mele",
+    endpoint: "/api/auth/me/classes",
     idField: "classId",
     columns: [
       { key: "title", label: "Titlu" },
@@ -50,12 +26,11 @@ const USER_SECTIONS = [
     ]
   },
   {
-    key: "subscriptions",
+    key: "my-subscriptions",
     label: "Abonamentele mele",
-    endpoint: "/api/subscriptions",
+    endpoint: "/api/auth/me/subscriptions",
     idField: "subscriptionId",
     columns: [
-      { key: "memberId", label: "Membru ID" },
       { key: "planId", label: "Plan ID" },
       { key: "startDate", label: "Data start" },
       { key: "endDate", label: "Data sfarsit" },
@@ -493,7 +468,7 @@ function UserPortal({ onLogout, me }) {
   const loadIdRef = useRef(0);
   const pageSize = 8;
 
-  const section = USER_SECTIONS.find((s) => s.key === activeSectionKey);
+  const section = availableSections.find((s) => s.key === activeSectionKey) ?? availableSections[0];
   const colKeys = section.columns.map((c) => c.key);
 
   function toggleSort(col) {
@@ -570,6 +545,10 @@ function UserPortal({ onLogout, me }) {
     loadData();
   }, [activeSectionKey]);
 
+  useEffect(() => {
+    setActiveSectionKey(availableSections[0].key);
+  }, [availableSections]);
+
   const processedRows = useMemo(
     () => clientSortAndFilter(rows, colKeys, searchTerm, sortField, sortDir),
     [rows, colKeys, searchTerm, sortField, sortDir]
@@ -590,7 +569,7 @@ function UserPortal({ onLogout, me }) {
       <header className="portal-header">
         <span className="portal-brand">Fitness Gym</span>
         <nav className="portal-nav">
-          {USER_SECTIONS.map((s) => (
+            {availableSections.map((s) => (
             <button
               key={s.key}
               type="button"
@@ -808,7 +787,170 @@ function LoginView({ onSuccess }) {
     <div className="center-box">
       <h1>Gym System</h1>
       <p className="subtle-text">Conturi demo: admin / Admin123! &nbsp;&middot;&nbsp; user / User123!</p>
-      <form onSubmit={handleSubmit} className="login-form">
+      <div className="auth-tabs">
+        <button
+          type="button"
+          className={activeTab === "login" ? "tab active" : "tab"}
+          onClick={() => setActiveTab("login")}
+        >
+          Login
+        </button>
+        <button
+          type="button"
+          className={activeTab === "register" ? "tab active" : "tab"}
+          onClick={() => setActiveTab("register")}
+        >
+          Creeaza cont USER
+        </button>
+      </div>
+      {activeTab === "login" ? (
+        <form onSubmit={handleSubmit} className="login-form">
+          <label className="field">
+            <span>Username</span>
+            <input value={username} onChange={(e) => setUsername(e.target.value)} required />
+          </label>
+          <label className="field">
+            <span>Password</span>
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          </label>
+          <label className="checkbox-field">
+            <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
+            Remember me
+          </label>
+          <button type="submit" disabled={loading}>
+            {loading ? "Se conecteaza..." : "Login"}
+          </button>
+        </form>
+      ) : (
+        <form onSubmit={handleRegister} className="login-form">
+          <label className="field">
+            <span>Tip cont</span>
+            <select
+              value={registerData.accountType}
+              onChange={(e) => setRegisterData((prev) => ({ ...prev, accountType: e.target.value }))}
+            >
+              <option value="MEMBER">Client sala</option>
+              <option value="TRAINER">Antrenor</option>
+            </select>
+          </label>
+          <label className="field">
+            <span>Username</span>
+            <input
+              value={registerData.username}
+              onChange={(e) => setRegisterData((prev) => ({ ...prev, username: e.target.value }))}
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Password</span>
+            <input
+              type="password"
+              value={registerData.password}
+              onChange={(e) => setRegisterData((prev) => ({ ...prev, password: e.target.value }))}
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Nume complet</span>
+            <input
+              value={registerData.fullName}
+              onChange={(e) => setRegisterData((prev) => ({ ...prev, fullName: e.target.value }))}
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Email</span>
+            <input
+              type="email"
+              value={registerData.email}
+              onChange={(e) => setRegisterData((prev) => ({ ...prev, email: e.target.value }))}
+              required
+            />
+          </label>
+          <label className="field">
+            <span>Telefon</span>
+            <input
+              value={registerData.phone}
+              onChange={(e) => setRegisterData((prev) => ({ ...prev, phone: e.target.value }))}
+            />
+          </label>
+          {registerData.accountType === "MEMBER" ? (
+            <label className="field">
+              <span>Data nasterii</span>
+              <input
+                type="date"
+                value={registerData.dateOfBirth}
+                onChange={(e) => setRegisterData((prev) => ({ ...prev, dateOfBirth: e.target.value }))}
+                required
+              />
+            </label>
+          ) : (
+            <label className="field">
+              <span>Specializare</span>
+              <input
+                value={registerData.specialization}
+                onChange={(e) =>
+                  setRegisterData((prev) => ({ ...prev, specialization: e.target.value }))
+                }
+              />
+            </label>
+          )}
+          <button type="submit" disabled={loading}>
+            {loading ? "Se creeaza..." : "Creeaza cont"}
+          </button>
+        </form>
+      )}
+      {success ? <p className="success-text">{success}</p> : null}
+      {error ? <p className="error-text">{error}</p> : null}
+    </div>
+  );
+}
+
+function AdminAccountPanel() {
+  const [formData, setFormData] = useState({
+    username: "",
+    password: "",
+    email: "",
+    fullName: "",
+    phone: "",
+    specialization: ""
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    setSuccess("");
+    try {
+      await createAdminAccount(formData);
+      setSuccess("Cont ADMIN creat cu succes.");
+      setFormData({
+        username: "",
+        password: "",
+        email: "",
+        fullName: "",
+        phone: "",
+        specialization: ""
+      });
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="panel">
+      <div className="panel-header">
+        <div>
+          <h2>Creare cont ADMIN</h2>
+          <p className="subtle-text">Pentru angajatii salii. Endpoint disponibil doar pentru ADMIN.</p>
+        </div>
+      </div>
+      <form className="form-grid" onSubmit={handleSubmit}>
         <label className="field">
           <span>Username</span>
           <input
@@ -819,15 +961,51 @@ function LoginView({ onSuccess }) {
         </label>
         <label className="field">
           <span>Password</span>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <input
+            type="password"
+            value={formData.password}
+            onChange={(e) => setFormData((prev) => ({ ...prev, password: e.target.value }))}
+            required
+          />
         </label>
-        <label className="checkbox-field">
-          <input type="checkbox" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
-          Remember me
+        <label className="field">
+          <span>Email</span>
+          <input
+            type="email"
+            value={formData.email}
+            onChange={(e) => setFormData((prev) => ({ ...prev, email: e.target.value }))}
+            required
+          />
         </label>
-        <button type="submit" disabled={loading}>
-          {loading ? "Se conecteaza..." : "Login"}
-        </button>
+        <label className="field">
+          <span>Nume complet</span>
+          <input
+            value={formData.fullName}
+            onChange={(e) => setFormData((prev) => ({ ...prev, fullName: e.target.value }))}
+            required
+          />
+        </label>
+        <label className="field">
+          <span>Telefon</span>
+          <input
+            value={formData.phone}
+            onChange={(e) => setFormData((prev) => ({ ...prev, phone: e.target.value }))}
+          />
+        </label>
+        <label className="field">
+          <span>Specializare</span>
+          <input
+            value={formData.specialization}
+            onChange={(e) =>
+              setFormData((prev) => ({ ...prev, specialization: e.target.value }))
+            }
+          />
+        </label>
+        <div className="form-actions">
+          <button type="submit" disabled={loading}>
+            {loading ? "Se creeaza..." : "Creeaza cont ADMIN"}
+          </button>
+        </div>
       </form>
       {success ? <p className="success-text">{success}</p> : null}
       {error ? <p className="error-text">{error}</p> : null}
@@ -882,7 +1060,7 @@ export default function App() {
 
   if (isCheckingAuth) return <div className="center-box">Se verifica sesiunea...</div>;
   if (!isAuthenticated) return <LoginView onSuccess={refreshSession} />;
-  if (role === "user") return <UserPortal onLogout={handleLogout} />;
+  if (role === "user") return <UserPortal onLogout={handleLogout} me={me} />;
 
   return (
     <div className="layout">
@@ -912,6 +1090,7 @@ export default function App() {
           </div>
         </header>
         {authError ? <p className="error-text">{authError}</p> : null}
+        <AdminAccountPanel />
         <CrudPanel resource={selectedResource} canWrite={canWrite} roleLabel={roleLabel} />
       </main>
     </div>
