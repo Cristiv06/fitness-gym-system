@@ -608,19 +608,53 @@ function UserPortal({ onLogout }) {
 }
 
 function LoginView({ onSuccess }) {
+  const [activeTab, setActiveTab] = useState("login");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(true);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [registerData, setRegisterData] = useState({
+    username: "",
+    password: "",
+    accountType: "MEMBER",
+    email: "",
+    fullName: "",
+    phone: "",
+    dateOfBirth: "",
+    specialization: ""
+  });
 
   async function handleSubmit(event) {
     event.preventDefault();
     setLoading(true);
     setError("");
+    setSuccess("");
     try {
       await login({ username, password, rememberMe });
       await onSuccess();
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRegister(event) {
+    event.preventDefault();
+    setLoading(true);
+    setError("");
+    setSuccess("");
+    try {
+      await registerNormalAccount({
+        ...registerData,
+        dateOfBirth: registerData.accountType === "MEMBER" ? registerData.dateOfBirth || null : null,
+        specialization:
+          registerData.accountType === "TRAINER" ? registerData.specialization || null : null
+      });
+      setSuccess("Cont USER creat cu succes. Te poti autentifica acum.");
+      setActiveTab("login");
     } catch (e) {
       setError(e.message);
     } finally {
@@ -635,7 +669,11 @@ function LoginView({ onSuccess }) {
       <form onSubmit={handleSubmit} className="login-form">
         <label className="field">
           <span>Username</span>
-          <input value={username} onChange={(e) => setUsername(e.target.value)} required />
+          <input
+            value={formData.username}
+            onChange={(e) => setFormData((prev) => ({ ...prev, username: e.target.value }))}
+            required
+          />
         </label>
         <label className="field">
           <span>Password</span>
@@ -649,6 +687,7 @@ function LoginView({ onSuccess }) {
           {loading ? "Se conecteaza..." : "Login"}
         </button>
       </form>
+      {success ? <p className="success-text">{success}</p> : null}
       {error ? <p className="error-text">{error}</p> : null}
     </div>
   );
@@ -660,6 +699,7 @@ export default function App() {
   const [selectedResourceKey, setSelectedResourceKey] = useState(resources[0].key);
   const [authError, setAuthError] = useState("");
   const [role, setRole] = useState("guest");
+  const [me, setMe] = useState(null);
 
   const selectedResource =
     resources.find((resource) => resource.key === selectedResourceKey) ?? resources[0];
@@ -670,6 +710,7 @@ export default function App() {
     const session = await getCurrentSession();
     setIsAuthenticated(session.authenticated);
     setRole(session.role || "user");
+    setMe(session);
   }
 
   useEffect(() => {
@@ -693,6 +734,7 @@ export default function App() {
     } finally {
       setIsAuthenticated(false);
       setRole("guest");
+      setMe(null);
     }
   }
 

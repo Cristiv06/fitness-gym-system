@@ -251,6 +251,16 @@ th {
   gap: 10px;
 }
 
+.auth-tabs {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 14px;
+}
+
+.auth-tabs .tab {
+  text-align: center;
+}
+
 .checkbox-field {
   display: flex;
   align-items: center;
@@ -274,6 +284,10 @@ th {
   border-radius: 10px;
   padding: 10px 12px;
   margin-bottom: 12px;
+}
+
+.app-shell .panel + .panel {
+  margin-top: 14px;
 }
 
 @media (max-width: 940px) {
