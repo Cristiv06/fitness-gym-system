@@ -43,9 +43,9 @@ export const resources = [
     idField: "subscriptionId",
     fields: [
       { key: "memberId", label: "Member ID", type: "number", required: true },
-      { key: "planId", label: "Plan ID", type: "number", required: true },
+      { key: "planId", label: "Plan", type: "plan-select", required: true },
       { key: "startDate", label: "Start Date", type: "date", required: true },
-      { key: "endDate", label: "End Date", type: "date", required: true },
+      { key: "endDate", label: "End Date (auto)", type: "date" },
       {
         key: "status",
         label: "Status",
@@ -64,7 +64,7 @@ export const resources = [
       { key: "fullName", label: "Full Name", type: "text", required: true },
       { key: "specialization", label: "Specialization", type: "text" },
       { key: "phone", label: "Phone", type: "text" },
-      { key: "email", label: "Email", type: "text" }
+      { key: "email", label: "Email", type: "email" }
     ]
   },
   {

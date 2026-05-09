@@ -128,6 +128,7 @@ public class AuthAccountService {
                         subscription.getSubscriptionId(),
                         member.getMemberId(),
                         subscription.getPlan().getPlanId(),
+                        subscription.getPlan().getName(),
                         subscription.getStartDate(),
                         subscription.getEndDate(),
                         subscription.getStatus(),
@@ -223,6 +224,7 @@ public class AuthAccountService {
         return new GymClassResponse(
                 gymClass.getClassId(),
                 gymClass.getTrainer().getTrainerId(),
+                gymClass.getTrainer().getFullName(),
                 gymClass.getRoom().getRoomId(),
                 gymClass.getTitle(),
                 gymClass.getStartTime(),
