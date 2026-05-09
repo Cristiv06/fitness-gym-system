@@ -31,7 +31,7 @@ const USER_SECTIONS = [
     endpoint: "/api/auth/me/subscriptions",
     idField: "subscriptionId",
     columns: [
-      { key: "planId", label: "Plan ID" },
+      { key: "planName", label: "Plan" },
       { key: "startDate", label: "Data start" },
       { key: "endDate", label: "Data sfarsit" },
       { key: "status", label: "Status" }
@@ -68,7 +68,7 @@ function formatForInput(value, type) {
 
 function toPayload(value, type) {
   if (value === "") return null;
-  if (type === "number") return Number(value);
+  if (type === "number" || type === "plan-select") return Number(value);
   if (type === "csv-number-array") {
     return value.split(",").map((v) => v.trim()).filter(Boolean).map(Number);
   }
@@ -85,9 +85,17 @@ function validateForm(resource, formData) {
   for (const field of resource.fields) {
     const value = formData[field.key];
     if (field.required && !String(value || "").trim()) return `${field.label} este obligatoriu.`;
-    if (field.type === "number" && value !== "" && Number.isNaN(Number(value))) {
-      return `${field.label} trebuie sa fie numar valid.`;
+    if ((field.type === "number" || field.type === "plan-select") && value !== "" && Number.isNaN(Number(value))) {
+      return `${field.label} trebuie sa fie un numar valid.`;
     }
+    if (field.type === "email" && value && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+      return `${field.label} nu este o adresa de email valida.`;
+    }
+  }
+  const startDate = formData.startDate || formData.startTime;
+  const endDate = formData.endDate || formData.endTime;
+  if (startDate && endDate && endDate < startDate) {
+    return "Data/ora de sfarsit trebuie sa fie dupa data/ora de start.";
   }
   return "";
 }
@@ -164,6 +172,7 @@ function CrudPanel({ resource, canWrite, roleLabel }) {
   const [sortDir, setSortDir] = useState("asc");
   const [page, setPage] = useState(1);
   const [toast, setToast] = useState("");
+  const [plans, setPlans] = useState([]);
 
   const useServerPaging = Boolean(resource.pageEndpoint);
 
@@ -214,6 +223,11 @@ function CrudPanel({ resource, canWrite, roleLabel }) {
     setServerTotalPages(1);
     setServerTotalRows(0);
     loadDataWith(null, "asc", 1);
+    if (resource.key === "subscriptions") {
+      apiFetch("/api/membership-plans").then((data) => setPlans(Array.isArray(data) ? data : [])).catch(() => {});
+    } else {
+      setPlans([]);
+    }
   }, [resource.key]);
 
   function toggleSort(col) {
@@ -239,7 +253,22 @@ function CrudPanel({ resource, canWrite, roleLabel }) {
   });
 
   function handleChange(key, value) {
-    setFormData((prev) => ({ ...prev, [key]: value }));
+    setFormData((prev) => {
+      const next = { ...prev, [key]: value };
+      if (resource.key === "subscriptions" && (key === "planId" || key === "startDate")) {
+        const planId = key === "planId" ? value : prev.planId;
+        const startDate = key === "startDate" ? value : prev.startDate;
+        if (planId && startDate) {
+          const plan = plans.find((p) => String(p.planId) === String(planId));
+          if (plan) {
+            const d = new Date(startDate);
+            d.setMonth(d.getMonth() + plan.durationMonths);
+            next.endDate = d.toISOString().slice(0, 10);
+          }
+        }
+      }
+      return next;
+    });
   }
 
   function startEdit(row) {
@@ -368,17 +397,34 @@ function CrudPanel({ resource, canWrite, roleLabel }) {
                   <option key={opt} value={opt}>{opt}</option>
                 ))}
               </select>
+            ) : field.type === "plan-select" ? (
+              <select
+                value={formData[field.key]}
+                onChange={(e) => handleChange(field.key, e.target.value)}
+                required={field.required}
+                disabled={!canWrite}
+              >
+                <option value="">Selecteaza plan...</option>
+                {plans.map((p) => (
+                  <option key={p.planId} value={p.planId}>
+                    {p.name} — {p.durationMonths} luni — {p.price} RON
+                  </option>
+                ))}
+              </select>
             ) : (
               <input
                 type={
                   field.type === "csv-number-array" ? "text"
                   : field.type === "datetime-local" ? "datetime-local"
-                  : field.type
+                  : field.type === "email" ? "email"
+                  : field.type === "date" ? "date"
+                  : "text"
                 }
                 step={field.step}
                 value={formData[field.key]}
                 onChange={(e) => handleChange(field.key, e.target.value)}
                 required={field.required}
+                readOnly={field.key === "endDate" && resource.key === "subscriptions" && Boolean(formData.planId)}
                 disabled={!canWrite}
               />
             )}
@@ -465,6 +511,8 @@ function UserPortal({ onLogout, me }) {
     endTime: "",
     maxParticipants: ""
   });
+  const [rooms, setRooms] = useState([]);
+  const [enrolledClassIds, setEnrolledClassIds] = useState(new Set());
   const loadIdRef = useRef(0);
   const pageSize = 8;
 
@@ -484,12 +532,19 @@ function UserPortal({ onLogout, me }) {
     setError("");
     setRows([]);
     try {
-      const data =
-        section.key === "trainer-classes"
-          ? await getTrainerClassesForMember()
-          : await apiFetch(section.endpoint);
-      if (thisId !== loadIdRef.current) return;
-      setRows(Array.isArray(data) ? data : []);
+      if (section.key === "trainer-classes") {
+        const [classes, enrollments] = await Promise.all([
+          getTrainerClassesForMember(),
+          apiFetch("/api/auth/me/enrollments")
+        ]);
+        if (thisId !== loadIdRef.current) return;
+        setEnrolledClassIds(new Set((enrollments || []).map((e) => e.classId)));
+        setRows(Array.isArray(classes) ? classes : []);
+      } else {
+        const data = await apiFetch(section.endpoint);
+        if (thisId !== loadIdRef.current) return;
+        setRows(Array.isArray(data) ? data : []);
+      }
     } catch (e) {
       if (thisId !== loadIdRef.current) return;
       setError(e.message);
@@ -515,6 +570,14 @@ function UserPortal({ onLogout, me }) {
     event.preventDefault();
     setError("");
     setToast("");
+    if (trainerClassForm.startTime && trainerClassForm.endTime && trainerClassForm.endTime <= trainerClassForm.startTime) {
+      setError("Ora de sfarsit trebuie sa fie dupa ora de start.");
+      return;
+    }
+    if (!trainerClassForm.roomId) {
+      setError("Selecteaza o sala.");
+      return;
+    }
     try {
       await createTrainerClass({
         roomId: Number(trainerClassForm.roomId),
@@ -536,6 +599,12 @@ function UserPortal({ onLogout, me }) {
       setError(e.message);
     }
   }
+
+  useEffect(() => {
+    if (isTrainerOnly && rooms.length === 0) {
+      apiFetch("/api/rooms").then((data) => setRooms(Array.isArray(data) ? data : [])).catch(() => {});
+    }
+  }, [isTrainerOnly]);
 
   useEffect(() => {
     setSearchTerm("");
@@ -610,15 +679,21 @@ function UserPortal({ onLogout, me }) {
             <h3>Adauga clasa noua</h3>
             <form className="form-grid" onSubmit={handleTrainerCreateClass}>
               <label className="field">
-                <span>Room ID</span>
-                <input
-                  type="number"
+                <span>Sala</span>
+                <select
                   value={trainerClassForm.roomId}
                   onChange={(e) =>
                     setTrainerClassForm((prev) => ({ ...prev, roomId: e.target.value }))
                   }
                   required
-                />
+                >
+                  <option value="">Selecteaza sala...</option>
+                  {rooms.map((r) => (
+                    <option key={r.roomId} value={r.roomId}>
+                      {r.name} (max {r.maxCapacity} persoane)
+                    </option>
+                  ))}
+                </select>
               </label>
               <label className="field">
                 <span>Titlu</span>
@@ -702,9 +777,13 @@ function UserPortal({ onLogout, me }) {
                     ))}
                     {section.key === "trainer-classes" ? (
                       <td className="actions-cell">
-                        <button type="button" onClick={() => handleEnroll(row.classId)}>
-                          Inscrie-ma
-                        </button>
+                        {enrolledClassIds.has(row.classId) ? (
+                          <span className="enrolled-badge">✓ Inscris</span>
+                        ) : (
+                          <button type="button" onClick={() => handleEnroll(row.classId)}>
+                            Inscrie-ma
+                          </button>
+                        )}
                       </td>
                     ) : null}
                   </tr>

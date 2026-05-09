@@ -128,6 +128,7 @@ public class AuthAccountService {
                         subscription.getSubscriptionId(),
                         member.getMemberId(),
                         subscription.getPlan().getPlanId(),
+                        subscription.getPlan().getName(),
                         subscription.getStartDate(),
                         subscription.getEndDate(),
                         subscription.getStatus(),

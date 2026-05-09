@@ -480,3 +480,26 @@ th {
     margin: 20px auto;
   }
 }
+
+/* ── Status badges ─────────────────────────────────────────── */
+.status-cell { font-weight: 600; }
+.status-active { color: #027a48; }
+.status-expired { color: #b42318; }
+.status-cancelled { color: #64748b; }
+
+/* ── Enrolled badge ────────────────────────────────────────── */
+.enrolled-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #027a48;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+/* ── endDate auto hint ─────────────────────────────────────── */
+input[readonly] {
+  background: #f8fafc;
+  color: #64748b;
+  cursor: default;
+}

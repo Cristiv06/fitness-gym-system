@@ -8,6 +8,6 @@ public record SubscriptionRequest(
         @NotNull Long memberId,
         @NotNull Long planId,
         @NotNull LocalDate startDate,
-        @NotNull LocalDate endDate,
+        LocalDate endDate,
         SubscriptionStatus status) {
 }

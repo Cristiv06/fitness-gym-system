@@ -37,18 +37,23 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     @Override
     public SubscriptionResponse create(SubscriptionRequest request) {
-        validateDates(request);
         Member member = memberRepository
                 .findById(request.memberId())
                 .orElseThrow(() -> new NotFoundException("Membru negasit: " + request.memberId()));
         MembershipPlan plan = planRepository
                 .findById(request.planId())
                 .orElseThrow(() -> new NotFoundException("Plan negasit: " + request.planId()));
+        java.time.LocalDate endDate = request.endDate() != null
+                ? request.endDate()
+                : request.startDate().plusMonths(plan.getDurationMonths());
+        if (endDate.isBefore(request.startDate())) {
+            throw new BadRequestException("Data sfarsit trebuie sa fie >= data start.");
+        }
         Subscription s = new Subscription();
         s.setMember(member);
         s.setPlan(plan);
         s.setStartDate(request.startDate());
-        s.setEndDate(request.endDate());
+        s.setEndDate(endDate);
         s.setStatus(request.status() != null ? request.status() : SubscriptionStatus.ACTIVE);
         SubscriptionResponse response = toResponse(subscriptionRepository.save(s));
         log.info("Subscription created: id={}, memberId={}, planId={}, status={}",
@@ -70,7 +75,6 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     @Override
     public SubscriptionResponse update(Long subscriptionId, SubscriptionRequest request) {
-        validateDates(request);
         Subscription s = load(subscriptionId);
         Member member = memberRepository
                 .findById(request.memberId())
@@ -78,10 +82,16 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         MembershipPlan plan = planRepository
                 .findById(request.planId())
                 .orElseThrow(() -> new NotFoundException("Plan negasit: " + request.planId()));
+        java.time.LocalDate endDate = request.endDate() != null
+                ? request.endDate()
+                : request.startDate().plusMonths(plan.getDurationMonths());
+        if (endDate.isBefore(request.startDate())) {
+            throw new BadRequestException("Data sfarsit trebuie sa fie >= data start.");
+        }
         s.setMember(member);
         s.setPlan(plan);
         s.setStartDate(request.startDate());
-        s.setEndDate(request.endDate());
+        s.setEndDate(endDate);
         s.setStatus(request.status() != null ? request.status() : s.getStatus());
         log.info("Subscription updated: id={}", subscriptionId);
         return toResponse(subscriptionRepository.save(s));
@@ -91,13 +101,6 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     public void delete(Long subscriptionId) {
         subscriptionRepository.deleteById(load(subscriptionId).getSubscriptionId());
         log.info("Subscription deleted: id={}", subscriptionId);
-    }
-
-    private void validateDates(SubscriptionRequest request) {
-        if (request.endDate().isBefore(request.startDate())) {
-            log.warn("Invalid subscription dates: start={}, end={}", request.startDate(), request.endDate());
-            throw new BadRequestException("Data sfarsit trebuie sa fie >= data start.");
-        }
     }
 
     private Subscription load(Long id) {
@@ -111,6 +114,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 s.getSubscriptionId(),
                 s.getMember().getMemberId(),
                 s.getPlan().getPlanId(),
+                s.getPlan().getName(),
                 s.getStartDate(),
                 s.getEndDate(),
                 s.getStatus(),
