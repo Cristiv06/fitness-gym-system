@@ -1,0 +1,9 @@
+spring:
+  application:
+    name: user-service
+  config:
+    import: optional:configserver:http://localhost:8888
+
+app:
+  security:
+    remember-me-key: gym-remember-me-key-change-in-production-min-32-chars
