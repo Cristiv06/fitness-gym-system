@@ -27,5 +27,5 @@ user-service:
 # Proprietati demo pentru refresh dinamic (editeaza si fa POST /actuator/refresh)
 gym:
   info:
-    welcome-message: "Bun venit la Fitness Gym! (v1)"
+    welcome-message: "REFRESH FARA RESTART"
     max-default-capacity: 30
