@@ -2,54 +2,94 @@
 
 Aplicatie web pentru gestionarea unei sali de fitness: membri, abonamente, antrenori, clase de grup, inscrieri si check-in.
 
-Backend Spring Boot cu JPA (relatii complete), CRUD REST pentru toate entitatile domeniu, Spring Security (JDBC, roluri USER/ADMIN), pagina de login Thymeleaf, Swagger/OpenAPI.
+Arhitectura de **microservicii** (migrata dintr-un monolit Spring Boot): configurare centralizata, service discovery si comunicare inter-servicii prin REST (OpenFeign).
 
 ## Stack Tehnologic
 
 | Strat | Tehnologie |
 |-------|------------|
-| Baza de date | MySQL 8 |
-| Backend | Java 21, Spring Boot, Spring Data JPA, Flyway, Spring Security, Thymeleaf |
+| Baza de date | MySQL 8 (cate o schema per serviciu) |
+| Backend | Java 21, Spring Boot 3.3, Spring Data JPA, Flyway, Spring Security |
+| Cloud / Microservicii | Spring Cloud Config, Netflix Eureka, OpenFeign |
+| Frontend | React 18 + Vite |
 | Documentatie API | springdoc-openapi (Swagger UI) |
 | Infrastructura locala | Docker Compose |
 
-Flux local:
+## Arhitectura
 
-`Browser -> Login (Thymeleaf/React) / Swagger UI -> REST API (Spring Boot) -> Service -> Repository -> MySQL`
+```text
+                       ┌──────────────────┐
+                       │  config-server   │  :8888  (Spring Cloud Config)
+                       └────────┬─────────┘
+                                │ configuratii
+              ┌─────────────────┼─────────────────┐
+              ▼                 ▼                 ▼
+      ┌──────────────┐  ┌──────────────┐  ┌─────────────────────┐
+      │ user-service │  │ gym-service  │  │ notification-service│
+      │    :8081     │  │    :8082     │  │       :8083         │
+      └──────┬───────┘  └──────┬───────┘  └──────────┬──────────┘
+             │  Feign ↔ Feign  │      Feign (rapoarte)│
+             └────────┬────────┴──────────────────────┘
+                      ▼
+              ┌──────────────┐
+              │ eureka-server│  :8761  (Service Discovery)
+              └──────────────┘
+
+   Frontend (React/Vite :5173) ──proxy──► serviciile potrivite
+```
+
+## Componente
+
+| Componenta | Port | Rol |
+|------------|------|-----|
+| config-server | 8888 | Spring Cloud Config Server — serveste configuratiile tuturor serviciilor |
+| eureka-server | 8761 | Netflix Eureka — service registry, descoperire automata |
+| user-service | 8081 | Autentificare (Spring Security JDBC), membri, profiluri, planuri, abonamente |
+| gym-service | 8082 | Antrenori, sali, echipament, clase, inscrieri, check-in |
+| notification-service | 8083 | Rapoarte agregate (apeluri Feign catre user-service + gym-service) |
+| frontend | 5173 | UI React; proxy Vite ruteaza catre serviciul corect |
 
 ## Structura Proiect
 
 ```text
 fitness-gym-system/
-├── backend/
-│   ├── pom.xml
-│   └── src/main/
-│       ├── java/com/fitness/gym/
-│       │   ├── config/
-│       │   ├── controller/
-│       │   ├── dto/
-│       │   ├── entity/
-│       │   ├── exception/
-│       │   ├── repository/
-│       │   └── service/
-│       └── resources/
-│           ├── application.yml
-│           ├── static/css/
-│           ├── templates/
-│           └── db/migration/
-│               ├── V1__schema.sql
-│               ├── V2__seed.sql
-│               └── V3__security_and_extensions.sql
+├── config-server/          # Spring Cloud Config (:8888)
+│   └── src/main/resources/config/   # config per serviciu
+├── eureka-server/          # Eureka Discovery (:8761)
+├── user-service/           # :8081  — securitate + membri/abonamente
+├── gym-service/            # :8082  — clase/traineri/sali/check-in
+├── notification-service/   # :8083  — rapoarte (Feign)
+├── frontend/               # React + Vite (:5173)
+├── backend/                # monolitul original (referinta)
 └── docker-compose.yml
 ```
 
-## Baza de Date (Flyway)
+## Configurare Centralizata (Spring Cloud Config)
 
-- [V1__schema.sql](backend/src/main/resources/db/migration/V1__schema.sql) — tabele domeniu + constrangeri.
-- [V2__seed.sql](backend/src/main/resources/db/migration/V2__seed.sql) — date de demo.
-- [V3__security_and_extensions.sql](backend/src/main/resources/db/migration/V3__security_and_extensions.sql) — utilizatori/roluri Spring Security (`users`, `authorities`), `persistent_logins` (remember-me), `member_profile` (1:1 cu `member`), `equipment` si `room_equipment` (M:N sala–echipament).
+- `config-server` serveste configuratiile din `config-server/src/main/resources/config/`.
+- Fiecare serviciu citeste la startup: `spring.config.import: configserver:http://localhost:8888`.
+- Externalizate: port, URL/credentiale baza de date, URL Eureka, cheie remember-me.
+- Verificare: `http://localhost:8888/user-service/default`, `http://localhost:8888/gym-service/default`.
 
-## Model ERD (JPA + schema)
+## Service Discovery si Comunicare (Eureka + Feign)
+
+- Toate serviciile se inregistreaza automat in Eureka (`http://localhost:8761`).
+- **Comunicare inter-servicii prin REST (OpenFeign):**
+  - `user-service → gym-service`: creare antrenor la inregistrare, creare clasa (trainer), inscriere la clasa.
+  - `gym-service → user-service`: validare membru la inscriere / check-in (`/api/internal/members/{id}`).
+  - `notification-service → user-service + gym-service`: agregare date pentru rapoarte.
+- Endpoint-uri interne (`/api/internal/**`) — fara autentificare, dedicate apelurilor inter-servicii.
+
+## Baza de Date (Flyway, schema per serviciu)
+
+| Serviciu | Schema | Migrari |
+|----------|--------|---------|
+| user-service | `user_service_db` | V1 schema, V2 securitate (`users`/`authorities`/`persistent_logins`), V3 seed |
+| gym-service | `gym_service_db` | V1 schema (fara FK cross-service), V2 seed |
+
+> Referintele cross-service (ex. `member_id` in `class_enrollment`/`check_in`) sunt stocate ca `Long` simplu, fara FK intre scheme — granita corecta intre microservicii.
+
+## Model ERD
 
 ```mermaid
 erDiagram
@@ -60,79 +100,86 @@ erDiagram
     Room ||--o{ GymClass : "gazduieste"
     Room }o--o{ Equipment : "room_equipment"
     GymClass ||--o{ ClassEnrollment : "inscrieri"
-    Member ||--o{ ClassEnrollment : "membru"
     Member ||--o{ CheckIn : "intrari"
     users ||--o{ authorities : "roluri"
 ```
 
-Relatii JPA (cerinte Lab2):
+Relatii JPA:
+- `@OneToOne`: `Member` ↔ `MemberProfile` (user-service).
+- `@OneToMany`/`@ManyToOne`: `Member`/`MembershipPlan` → `Subscription` (user-service); `Trainer`/`Room` → `GymClass`, `GymClass` → `ClassEnrollment` (gym-service).
+- `@ManyToMany`: `Room` ↔ `Equipment` prin `room_equipment` (gym-service).
 
-- `@OneToOne`: `Member` ↔ `MemberProfile` (cheie `member_id`).
-- `@OneToMany` / `@ManyToOne`: ex. `Member` → `Subscription`, `MembershipPlan` → `Subscription`, `Trainer`/`Room` → `GymClass`, `GymClass` → `ClassEnrollment`, `Member` → `CheckIn`.
-- `@ManyToMany`: `Room` ↔ `Equipment` prin tabelul `room_equipment` (`@JoinTable` pe `Room`).
+## Securitate (Spring Security — user-service)
 
-## Securitate (Spring Security)
+- Autentificare **JDBC** (`JdbcUserDetailsManager`), parole **BCrypt**.
+- Roluri: `ROLE_USER`, `ROLE_ADMIN` (`admin` are ambele; `user` doar `ROLE_USER`).
+- Autorizare `/api/**`: **GET** → USER sau ADMIN; **POST/PUT/DELETE** → doar ADMIN.
+- `/api/internal/**` → permis (apeluri inter-servicii).
+- Login form (`/login`), logout, remember-me persistent, CSRF (cookie `XSRF-TOKEN`).
+- Conturi demo: `admin` / `Admin123!`, `user` / `User123!`.
 
-- Autentificare **JDBC** (`JdbcUserDetailsManager`), parole **BCrypt** in tabelul `users`.
-- Roluri in `authorities`: `ROLE_USER`, `ROLE_ADMIN` (utilizatorul `admin` are ambele; `user` doar `ROLE_USER`).
-- **Autorizare**: toate rutele `/api/**` necesita autentificare. **GET** `/api/**` — `USER` sau `ADMIN`. **POST, PUT, DELETE** `/api/**` — doar `ADMIN`.
-- **Swagger UI** si **OpenAPI** (`/swagger-ui/**`, `/v3/api-docs/**`) — acelasi model (citire pentru USER+ADMIN; in Swagger, operatiunile de scriere necesita `ADMIN`).
-- **Login** custom: `/login` (Thymeleaf), **logout** POST la `/logout`, **remember-me** persistent (tabel `persistent_logins`), **CSRF** activ (cookie `XSRF-TOKEN` vizibil pentru clienti web; Swagger are suport CSRF activat prin configuratie).
-- Conturi demo (dupa migrare): `admin` / `Admin123!`, `user` / `User123!`.
+## API REST
 
-Pagina principala: `/` sau `/home` (link catre login si, dupa autentificare, Swagger).
-
-## API REST (CRUD)
-
-Prefix comun: `/api`. Toate resursele suporta `GET` (list + by id), `POST`, `PUT`, `DELETE` unde este cazul.
-
-| Resursa | Path |
-|---------|------|
-| Membri | `/api/members` |
-| Profil membru (1:1) | `/api/member-profiles` |
-| Planuri abonament | `/api/membership-plans` |
-| Abonamente | `/api/subscriptions` |
-| Antrenori | `/api/trainers` |
-| Echipament | `/api/equipment` |
-| Sali (+ legaturi M:N echipament) | `/api/rooms` |
-| Clase | `/api/gym-classes` |
-| Inscrieri la clasa | `/api/class-enrollments` |
-| Check-in | `/api/check-ins` |
+| Resursa | Serviciu | Path |
+|---------|----------|------|
+| Membri | user-service | `/api/members` |
+| Profil membru (1:1) | user-service | `/api/member-profiles` |
+| Planuri abonament | user-service | `/api/membership-plans` |
+| Abonamente | user-service | `/api/subscriptions` |
+| Autentificare / cont | user-service | `/api/auth/**` |
+| Antrenori | gym-service | `/api/trainers` |
+| Echipament | gym-service | `/api/equipment` |
+| Sali (M:N echipament) | gym-service | `/api/rooms` |
+| Clase | gym-service | `/api/gym-classes` |
+| Inscrieri la clasa | gym-service | `/api/class-enrollments` |
+| Check-in | gym-service | `/api/check-ins` |
+| Rapoarte agregate | notification-service | `/api/reports/{members,subscriptions,classes,check-ins}` |
 
 `DELETE /api/members/{id}` — dezactivare logica (`is_active = false`).
 
-Validare payload (`jakarta.validation`), layer service cu reguli de business, erori mapate in [ApiExceptionHandler](backend/src/main/java/com/fitness/gym/exception/ApiExceptionHandler.java) (`400`, `404`, `409`).
-
-## Swagger
-
-Dupa autentificare in browser (sesiune), deschide [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html). Pentru cereri `POST`/`PUT`/`DELETE`, Swagger transmite tokenul CSRF cand optiunea este activata (`springdoc.swagger-ui.csrf.enabled: true` in `application.yml`).
-
 ## Rulare Locala
 
-### 1) Pornire baza de date
+### 1) Baza de date (MySQL pe 3306)
 
-```bash
-docker compose up -d
+Creeaza schemele si userul:
+
+```sql
+CREATE DATABASE user_service_db;
+CREATE DATABASE gym_service_db;
+CREATE USER 'gym_user'@'localhost' IDENTIFIED BY 'gym_pass';
+GRANT ALL PRIVILEGES ON user_service_db.* TO 'gym_user'@'localhost';
+GRANT ALL PRIVILEGES ON gym_service_db.* TO 'gym_user'@'localhost';
+FLUSH PRIVILEGES;
 ```
 
-### 2) Pornire backend
+### 2) Pornire servicii (in aceasta ordine)
 
-```bash
-cd backend
-mvn spring-boot:run
+```text
+1. config-server         (:8888)
+2. eureka-server         (:8761)
+3. user-service          (:8081)
+4. gym-service           (:8082)
+5. notification-service  (:8083)
 ```
 
-La startup, Flyway aplica migrarile (inclusiv V3).
+Fiecare: ruleaza clasa `*Application` din IntelliJ. Flyway aplica migrarile la startup.
 
-## Configurare
+### 3) Frontend
 
-In [application.yml](backend/src/main/resources/application.yml):
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-- `DB_URL`, `DB_USER`, `DB_PASSWORD`, `SERVER_PORT`
-- `REMEMBER_ME_KEY` — cheie stabila pentru tokenuri remember-me (recomandat in productie).
+Deschide `http://localhost:5173` si autentifica-te cu `admin` / `Admin123!`.
 
-## Cerinte MVP (Roadmap)
+## Verificare
 
-- RF01 Autentificare si roluri — **implementat** (Spring Security JDBC + Thymeleaf).
-- RF02 Gestionare membri — **CRUD** (delete logic).
-- RF03–RF10 — parte din API-uri de mai sus (planuri, subscriptii, antrenori, sali, clase, inscrieri, check-in); rafinari business (ex. check-in cu verificare abonament activ) pot urma.
+- Eureka dashboard: `http://localhost:8761` — trebuie sa apara USER-SERVICE, GYM-SERVICE, NOTIFICATION-SERVICE.
+- Config server: `http://localhost:8888/user-service/default`.
+- Test Feign (raport agregat): `http://localhost:8083/api/reports/members`.
+
+## Note despre alternativa Docker
+
+`docker-compose.yml` porneste intregul stack (MySQL + cele 5 servicii) acolo unde virtualizarea este disponibila. Pe masinile fara suport de virtualizare, foloseste MySQL instalat local + pornirea serviciilor din IDE (vezi mai sus).
