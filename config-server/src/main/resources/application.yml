@@ -10,7 +10,8 @@ spring:
     config:
       server:
         native:
-          search-locations: classpath:/config
+          # folder pe disc (editabil live) cu fallback la classpath; prima locatie are prioritate
+          search-locations: file:./config-repo,file:./config-server/config-repo,classpath:/config
 
 management:
   endpoints:

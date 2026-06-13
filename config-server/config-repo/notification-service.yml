@@ -1,0 +1,12 @@
+server:
+  port: 8083
+
+spring:
+  application:
+    name: notification-service
+
+user-service:
+  url: http://user-service
+
+gym-service:
+  url: http://gym-service
