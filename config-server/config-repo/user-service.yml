@@ -1,11 +1,11 @@
 server:
-  port: 8082
+  port: 8081
 
 spring:
   application:
-    name: gym-service
+    name: user-service
   datasource:
-    url: jdbc:mysql://localhost:3306/gym_service_db
+    url: jdbc:mysql://localhost:3306/user_service_db
     username: gym_user
     password: gym_pass
     driver-class-name: com.mysql.cj.jdbc.Driver
@@ -21,11 +21,5 @@ spring:
     locations: classpath:db/migration
     baseline-on-migrate: true
 
-user-service:
-  url: http://user-service
-
-# Proprietati demo pentru refresh dinamic (editeaza si fa POST /actuator/refresh)
-gym:
-  info:
-    welcome-message: "Bun venit la Fitness Gym! (v1)"
-    max-default-capacity: 30
+security:
+  remember-me-key: gym-remember-me-key-change-in-production-min-32-chars
