@@ -23,3 +23,23 @@ spring:
 
 security:
   remember-me-key: gym-remember-me-key-change-in-production-min-32-chars
+
+# Resilience4j - Circuit Breaker + Retry pentru apeluri catre gym-service
+resilience4j:
+  circuitbreaker:
+    instances:
+      gym-service:
+        registerHealthIndicator: true
+        slidingWindowSize: 5
+        minimumNumberOfCalls: 3
+        permittedNumberOfCallsInHalfOpenState: 2
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        waitDurationInOpenState: 10s
+        failureRateThreshold: 50
+        ignoreExceptions:
+          - feign.FeignException$NotFound
+  retry:
+    instances:
+      gym-service:
+        maxAttempts: 3
+        waitDuration: 500ms

@@ -1,6 +1,6 @@
 package com.fitness.gymservice.service.impl;
 
-import com.fitness.gymservice.client.UserServiceClient;
+import com.fitness.gymservice.client.UserServiceClientWrapper;
 import com.fitness.gymservice.dto.ClassEnrollmentRequest;
 import com.fitness.gymservice.dto.ClassEnrollmentResponse;
 import com.fitness.gymservice.dto.MemberResponse;
@@ -24,19 +24,19 @@ public class ClassEnrollmentServiceImpl implements ClassEnrollmentService {
 
     private final ClassEnrollmentRepository enrollmentRepository;
     private final GymClassRepository gymClassRepository;
-    private final UserServiceClient userServiceClient;
+    private final UserServiceClientWrapper userServiceClientWrapper;
 
     public ClassEnrollmentServiceImpl(ClassEnrollmentRepository enrollmentRepository,
-            GymClassRepository gymClassRepository, UserServiceClient userServiceClient) {
+            GymClassRepository gymClassRepository, UserServiceClientWrapper userServiceClientWrapper) {
         this.enrollmentRepository = enrollmentRepository;
         this.gymClassRepository = gymClassRepository;
-        this.userServiceClient = userServiceClient;
+        this.userServiceClientWrapper = userServiceClientWrapper;
     }
 
     @Override
     public ClassEnrollmentResponse create(ClassEnrollmentRequest request) {
-        // Validate member via user-service (Feign call - demonstrates inter-service communication)
-        MemberResponse member = userServiceClient.getMemberById(request.memberId());
+        // Validate member via user-service (circuit breaker + retry activ)
+        MemberResponse member = userServiceClientWrapper.getMemberById(request.memberId());
         if (Boolean.FALSE.equals(member.active())) {
             throw new BadRequestException("Membrul este inactiv si nu se poate inscrie.");
         }
