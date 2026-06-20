@@ -26,6 +26,13 @@ management:
     tracing:
       endpoint: http://localhost:9411/api/v2/spans
 
+# Securitate distribuita: JWT semnat HMAC pentru apelurile inter-servicii (/api/internal/**)
+internal:
+  jwt:
+    secret: "fitness-internal-jwt-secret-change-me-min-32-bytes-0123456789"
+    issuer: "fitness-internal"
+    ttl-seconds: 120
+
 logging:
   level:
     com.fitness: DEBUG

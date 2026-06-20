@@ -12,6 +12,7 @@ Arhitectura de **microservicii** (migrata dintr-un monolit Spring Boot): configu
 | Backend | Java 21, Spring Boot 3.3, Spring Data JPA, Flyway, Spring Security |
 | Cloud / Microservicii | Spring Cloud Config, Netflix Eureka, OpenFeign, Spring Cloud Gateway |
 | Reziliență | Resilience4j (Circuit Breaker + Retry) |
+| Securitate | Spring Security (sesiune + BCrypt), JWT HS256 (jjwt) inter-servicii |
 | Observabilitate | Spring Boot Actuator, Micrometer + Prometheus, Grafana, Zipkin (tracing) |
 | Frontend | React 18 + Vite |
 | Documentatie API | springdoc-openapi (Swagger UI) |
@@ -91,7 +92,7 @@ fitness-gym-system/
   - `user-service → gym-service`: creare antrenor la inregistrare, creare clasa (trainer), inscriere la clasa.
   - `gym-service → user-service`: validare membru la inscriere / check-in (`/api/internal/members/{id}`).
   - `notification-service → user-service + gym-service`: agregare date pentru rapoarte.
-- Endpoint-uri interne (`/api/internal/**`) — fara autentificare, dedicate apelurilor inter-servicii.
+- Endpoint-uri interne (`/api/internal/**`) — dedicate apelurilor inter-servicii, protejate cu **JWT de serviciu** (vezi *Securitate Distribuita*).
 
 ## API Gateway (Spring Cloud Gateway, :8080)
 
@@ -156,9 +157,26 @@ Relatii JPA:
 - Autentificare **JDBC** (`JdbcUserDetailsManager`), parole **BCrypt**.
 - Roluri: `ROLE_USER`, `ROLE_ADMIN` (`admin` are ambele; `user` doar `ROLE_USER`).
 - Autorizare `/api/**`: **GET** → USER sau ADMIN; **POST/PUT/DELETE** → doar ADMIN.
-- `/api/internal/**` → permis (apeluri inter-servicii).
+- `/api/internal/**` → necesita **JWT de serviciu** (`ROLE_SERVICE`) — vezi sectiunea de mai jos.
 - Login form (`/login`), logout, remember-me persistent, CSRF (cookie `XSRF-TOKEN`).
 - Conturi demo: `admin` / `Admin123!`, `user` / `User123!`.
+
+## Securitate Distribuita (JWT inter-servicii)
+
+Autentificare **JWT între microservicii** pentru apelurile interne (`/api/internal/**`), separat de sesiunea utilizatorului.
+
+- **Semnare (callers)** — `gym-service` si `notification-service` semneaza un JWT **HS256** (subiect = numele serviciului, issuer + expirare scurta) cu un secret partajat prin config-server (`internal.jwt.secret`). Un `RequestInterceptor` Feign (`FeignAuthInterceptor`) ataseaza automat `Authorization: Bearer <jwt>` pe fiecare apel inter-servicii.
+- **Validare (user-service)** — `InternalJwtAuthenticationFilter` verifica semnatura, issuer-ul si expirarea; la token valid autentifica apelantul ca `ROLE_SERVICE`. Endpoint-urile `/api/internal/**` cer `hasRole("SERVICE")`.
+- **Rezultat** — apel intern fara token sau cu token invalid → `401`; apel inter-servicii legitim (semnat) → `200`. Login-ul utilizatorului (sesiune + cookie) ramane neschimbat.
+
+```text
+gym-service / notification-service          user-service
+   │  semneaza JWT HS256 (secret partajat)      │
+   │  Authorization: Bearer <jwt>  ───────────► │  InternalJwtAuthenticationFilter
+   │      (Feign RequestInterceptor)            │  valideaza → ROLE_SERVICE → /api/internal/**
+```
+
+> Secretul este externalizat in `config-repo/application.yml` (`internal.jwt.secret`) — partajat de toate serviciile prin config-server.
 
 ## API REST
 

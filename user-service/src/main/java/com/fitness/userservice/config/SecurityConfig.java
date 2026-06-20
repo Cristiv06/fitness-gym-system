@@ -24,8 +24,11 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.provisioning.JdbcUserDetailsManager;
+import com.fitness.userservice.security.InternalJwtAuthenticationFilter;
+import com.fitness.userservice.security.InternalJwtService;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.authentication.rememberme.JdbcTokenRepositoryImpl;
 import org.springframework.security.web.authentication.rememberme.PersistentTokenRepository;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
@@ -83,11 +86,14 @@ public class SecurityConfig {
             DaoAuthenticationProvider authProvider,
             PersistentTokenRepository tokenRepo,
             UserDetailsService uds,
+            InternalJwtService internalJwtService,
             @Value("${app.security.remember-me-key}") String rememberMeKey) throws Exception {
         http.authenticationProvider(authProvider)
+                .addFilterBefore(new InternalJwtAuthenticationFilter(internalJwtService),
+                        UsernamePasswordAuthenticationFilter.class)
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.POST, "/api/auth/register").permitAll()
-                        .requestMatchers(HttpMethod.GET, "/api/internal/**").permitAll()
+                        .requestMatchers("/api/internal/**").hasRole("SERVICE")
                         .requestMatchers(HttpMethod.POST, "/api/auth/me/classes", "/api/auth/me/enrollments")
                             .hasAnyRole("USER", "ADMIN")
                         .requestMatchers(new AntPathRequestMatcher("/api/**")).access(API_ACCESS)
