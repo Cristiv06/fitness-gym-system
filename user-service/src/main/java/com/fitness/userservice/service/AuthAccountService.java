@@ -1,6 +1,6 @@
 package com.fitness.userservice.service;
 
-import com.fitness.userservice.client.GymServiceClient;
+import com.fitness.userservice.client.GymServiceClientWrapper;
 import com.fitness.userservice.dto.*;
 import com.fitness.userservice.entity.Member;
 import com.fitness.userservice.exception.BadRequestException;
@@ -22,16 +22,16 @@ public class AuthAccountService {
     private final PasswordEncoder passwordEncoder;
     private final MemberRepository memberRepository;
     private final SubscriptionRepository subscriptionRepository;
-    private final GymServiceClient gymServiceClient;
+    private final GymServiceClientWrapper gymServiceClientWrapper;
 
     public AuthAccountService(JdbcTemplate jdbcTemplate, PasswordEncoder passwordEncoder,
             MemberRepository memberRepository, SubscriptionRepository subscriptionRepository,
-            GymServiceClient gymServiceClient) {
+            GymServiceClientWrapper gymServiceClientWrapper) {
         this.jdbcTemplate = jdbcTemplate;
         this.passwordEncoder = passwordEncoder;
         this.memberRepository = memberRepository;
         this.subscriptionRepository = subscriptionRepository;
-        this.gymServiceClient = gymServiceClient;
+        this.gymServiceClientWrapper = gymServiceClientWrapper;
     }
 
     public AuthMeResponse registerUser(RegisterAccountRequest request) {
@@ -55,7 +55,7 @@ public class AuthAccountService {
             return new AuthMeResponse(request.username(), List.of("ROLE_USER"), saved.getMemberId(), null);
         }
 
-        TrainerResponse trainer = gymServiceClient.createTrainerWithUsername(
+        TrainerResponse trainer = gymServiceClientWrapper.createTrainerWithUsername(
                 new TrainerWithUsernameRequest(request.username(), request.fullName(),
                         request.specialization(), request.phone(), request.email()));
         return new AuthMeResponse(request.username(), List.of("ROLE_USER"), null, trainer.trainerId());
@@ -65,7 +65,7 @@ public class AuthAccountService {
         ensureNewUsername(request.username());
         createUserCredentials(request.username(), request.password(), List.of("ROLE_USER", "ROLE_ADMIN"));
 
-        TrainerResponse trainer = gymServiceClient.createTrainerWithUsername(
+        TrainerResponse trainer = gymServiceClientWrapper.createTrainerWithUsername(
                 new TrainerWithUsernameRequest(request.username(), request.fullName(),
                         request.specialization(), request.phone(), request.email()));
         return new AuthMeResponse(request.username(), List.of("ROLE_USER", "ROLE_ADMIN"), null, trainer.trainerId());
@@ -92,11 +92,11 @@ public class AuthAccountService {
     public List<GymClassResponse> getMyClasses(String username) {
         var memberOpt = memberRepository.findByUsername(username);
         if (memberOpt.isPresent()) {
-            return gymServiceClient.getClassesEnrolledByMember(memberOpt.get().getMemberId());
+            return gymServiceClientWrapper.getClassesEnrolledByMember(memberOpt.get().getMemberId());
         }
         Long trainerId = findTrainerIdByUsername(username);
         if (trainerId != null) {
-            return gymServiceClient.getClassesByTrainer(trainerId);
+            return gymServiceClientWrapper.getClassesByTrainer(trainerId);
         }
         throw new BadRequestException("Contul nu are profil de membru sau antrenor.");
     }
@@ -105,7 +105,7 @@ public class AuthAccountService {
     public List<GymClassResponse> getTrainerClassesForMember(String username) {
         memberRepository.findByUsername(username)
                 .orElseThrow(() -> new BadRequestException("Acest cont nu are profil de membru."));
-        return gymServiceClient.getAvailableClasses();
+        return gymServiceClientWrapper.getAvailableClasses();
     }
 
     public GymClassResponse createMyClass(String username, CreateMyGymClassRequest request) {
@@ -116,26 +116,26 @@ public class AuthAccountService {
         if (!request.endTime().isAfter(request.startTime())) {
             throw new BadRequestException("Ora de final trebuie sa fie dupa ora de start.");
         }
-        return gymServiceClient.createClass(new GymClassRequest(trainerId, request.roomId(),
+        return gymServiceClientWrapper.createClass(new GymClassRequest(trainerId, request.roomId(),
                 request.title(), request.startTime(), request.endTime(), request.maxParticipants()));
     }
 
     public ClassEnrollmentResponse enrollToClass(String username, EnrollMyClassRequest request) {
         Member member = memberRepository.findByUsername(username)
                 .orElseThrow(() -> new BadRequestException("Acest cont nu are profil de membru."));
-        return gymServiceClient.createEnrollment(new ClassEnrollmentRequest(member.getMemberId(), request.classId()));
+        return gymServiceClientWrapper.createEnrollment(new ClassEnrollmentRequest(member.getMemberId(), request.classId()));
     }
 
     @Transactional(readOnly = true)
     public List<ClassEnrollmentResponse> getMyEnrollments(String username) {
         Member member = memberRepository.findByUsername(username)
                 .orElseThrow(() -> new BadRequestException("Acest cont nu are profil de membru."));
-        return gymServiceClient.getEnrollmentsByMember(member.getMemberId());
+        return gymServiceClientWrapper.getEnrollmentsByMember(member.getMemberId());
     }
 
     private Long findTrainerIdByUsername(String username) {
         try {
-            TrainerResponse trainer = gymServiceClient.findTrainerByUsername(username);
+            TrainerResponse trainer = gymServiceClientWrapper.findTrainerByUsername(username);
             return trainer != null ? trainer.trainerId() : null;
         } catch (FeignException.NotFound e) {
             return null;
