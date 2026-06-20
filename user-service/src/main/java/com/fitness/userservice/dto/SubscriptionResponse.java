@@ -8,6 +8,7 @@ public record SubscriptionResponse(
         Long subscriptionId,
         Long memberId,
         Long planId,
+        String planName,
         LocalDate startDate,
         LocalDate endDate,
         SubscriptionStatus status,

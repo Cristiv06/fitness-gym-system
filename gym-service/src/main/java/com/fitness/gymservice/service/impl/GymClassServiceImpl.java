@@ -119,7 +119,7 @@ public class GymClassServiceImpl implements GymClassService {
     }
 
     private GymClassResponse toResponse(GymClass gc) {
-        return new GymClassResponse(gc.getClassId(), gc.getTrainer().getTrainerId(), gc.getRoom().getRoomId(),
-                gc.getTitle(), gc.getStartTime(), gc.getEndTime(), gc.getMaxParticipants());
+        return new GymClassResponse(gc.getClassId(), gc.getTrainer().getTrainerId(), gc.getTrainer().getFullName(),
+                gc.getRoom().getRoomId(), gc.getTitle(), gc.getStartTime(), gc.getEndTime(), gc.getMaxParticipants());
     }
 }
