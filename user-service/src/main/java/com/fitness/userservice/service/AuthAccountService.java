@@ -84,7 +84,8 @@ public class AuthAccountService {
                 .orElseThrow(() -> new BadRequestException("Acest cont nu are profil de membru."));
         return subscriptionRepository.findByMember_Username(username).stream()
                 .map(s -> new SubscriptionResponse(s.getSubscriptionId(), member.getMemberId(),
-                        s.getPlan().getPlanId(), s.getStartDate(), s.getEndDate(), s.getStatus(), s.getCreatedAt()))
+                        s.getPlan().getPlanId(), s.getPlan().getName(), s.getStartDate(), s.getEndDate(),
+                        s.getStatus(), s.getCreatedAt()))
                 .toList();
     }
 

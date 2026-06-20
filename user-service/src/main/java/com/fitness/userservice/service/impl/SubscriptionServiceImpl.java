@@ -12,6 +12,7 @@ import com.fitness.userservice.repository.MemberRepository;
 import com.fitness.userservice.repository.MembershipPlanRepository;
 import com.fitness.userservice.repository.SubscriptionRepository;
 import com.fitness.userservice.service.SubscriptionService;
+import java.time.LocalDate;
 import java.util.List;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -35,16 +36,16 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     @Override
     public SubscriptionResponse create(SubscriptionRequest request) {
-        validateDates(request);
         Member member = memberRepository.findById(request.memberId())
                 .orElseThrow(() -> new NotFoundException("Membru negasit: " + request.memberId()));
         MembershipPlan plan = planRepository.findById(request.planId())
                 .orElseThrow(() -> new NotFoundException("Plan negasit: " + request.planId()));
+        LocalDate endDate = resolveEndDate(request, plan);
         Subscription s = new Subscription();
         s.setMember(member);
         s.setPlan(plan);
         s.setStartDate(request.startDate());
-        s.setEndDate(request.endDate());
+        s.setEndDate(endDate);
         s.setStatus(request.status() != null ? request.status() : SubscriptionStatus.ACTIVE);
         return toResponse(subscriptionRepository.save(s));
     }
@@ -63,16 +64,16 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     @Override
     public SubscriptionResponse update(Long subscriptionId, SubscriptionRequest request) {
-        validateDates(request);
         Subscription s = load(subscriptionId);
         Member member = memberRepository.findById(request.memberId())
                 .orElseThrow(() -> new NotFoundException("Membru negasit: " + request.memberId()));
         MembershipPlan plan = planRepository.findById(request.planId())
                 .orElseThrow(() -> new NotFoundException("Plan negasit: " + request.planId()));
+        LocalDate endDate = resolveEndDate(request, plan);
         s.setMember(member);
         s.setPlan(plan);
         s.setStartDate(request.startDate());
-        s.setEndDate(request.endDate());
+        s.setEndDate(endDate);
         s.setStatus(request.status() != null ? request.status() : s.getStatus());
         return toResponse(subscriptionRepository.save(s));
     }
@@ -82,10 +83,14 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         subscriptionRepository.deleteById(load(subscriptionId).getSubscriptionId());
     }
 
-    private void validateDates(SubscriptionRequest request) {
-        if (request.endDate().isBefore(request.startDate())) {
+    private LocalDate resolveEndDate(SubscriptionRequest request, MembershipPlan plan) {
+        LocalDate endDate = request.endDate() != null
+                ? request.endDate()
+                : request.startDate().plusMonths(plan.getDurationMonths());
+        if (endDate.isBefore(request.startDate())) {
             throw new BadRequestException("Data sfarsit trebuie sa fie >= data start.");
         }
+        return endDate;
     }
 
     private Subscription load(Long id) {
@@ -95,6 +100,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     private SubscriptionResponse toResponse(Subscription s) {
         return new SubscriptionResponse(s.getSubscriptionId(), s.getMember().getMemberId(),
-                s.getPlan().getPlanId(), s.getStartDate(), s.getEndDate(), s.getStatus(), s.getCreatedAt());
+                s.getPlan().getPlanId(), s.getPlan().getName(), s.getStartDate(), s.getEndDate(),
+                s.getStatus(), s.getCreatedAt());
     }
 }
